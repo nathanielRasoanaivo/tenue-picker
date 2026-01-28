@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#6366f1">
+    <title>Tenue du Jour</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>👔 Tenue du Jour</h1>
+            <p class="subtitle">Laissez le hasard choisir pour vous</p>
+        </header>
+
+        <main>
+            <!-- Section Upload -->
+            <section class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+                    <div class="upload-content">
+                        <span class="upload-icon">📸</span>
+                        <p>Cliquez ou glissez vos photos de tenues</p>
+                        <button class="btn-secondary" id="uploadBtn">Ajouter des photos</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Sélection -->
+            <section class="action-section" id="actionSection" style="display: none;">
+                <button class="btn-primary" id="pickOutfitBtn">
+                    🎲 Choisir ma tenue
+                </button>
+            </section>
+
+            <!-- Résultat -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <div class="result-card">
+                    <h2>Votre tenue du jour</h2>
+                    <img id="selectedOutfit" src="" alt="Tenue sélectionnée">
+                    <div class="result-actions">
+                        <button class="btn-secondary" id="rePickBtn">🔄 Rechoisir</button>
+                        <button class="btn-secondary" id="closeResultBtn">✓ C'est bon</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Galerie -->
+            <section class="gallery-section" id="gallerySection" style="display: none;">
+                <div class="gallery-header">
+                    <h2>Mes tenues (<span id="outfitCount">0</span>)</h2>
+                    <button class="btn-text" id="toggleGalleryBtn">Voir tout</button>
+                </div>
+                <div class="gallery" id="gallery"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
