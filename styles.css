@@ -227,19 +227,22 @@ h1 {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(220, 38, 38, 0.9);
     color: white;
     border: none;
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    font-size: 1.2rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1.5rem;
     cursor: pointer;
-    display: none;
+    display: block;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s, background 0.2s;
 }
 
-.gallery-item:hover .delete-btn {
-    display: block;
+.gallery-item .delete-btn:active {
+    transform: scale(0.9);
+    background: rgba(185, 28, 28, 1);
 }
 
 /* Empty State */
