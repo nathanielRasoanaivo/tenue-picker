@@ -81,6 +81,7 @@ class TenuePickerApp {
         this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
         this.uploadBtn = document.getElementById('uploadBtn');
+        this.addMoreBtn = document.getElementById('addMoreBtn');
         this.uploadSection = document.getElementById('uploadSection');
         this.actionSection = document.getElementById('actionSection');
         this.pickOutfitBtn = document.getElementById('pickOutfitBtn');
@@ -108,6 +109,7 @@ class TenuePickerApp {
     setupEventListeners() {
         // Upload
         this.uploadBtn.addEventListener('click', () => this.fileInput.click());
+        this.addMoreBtn.addEventListener('click', () => this.fileInput.click());
         this.uploadArea.addEventListener('click', () => this.fileInput.click());
         this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
 
@@ -153,6 +155,9 @@ class TenuePickerApp {
                 reader.readAsDataURL(file);
             }
         }
+
+        // Réinitialiser l'input pour permettre de réajouter les mêmes fichiers
+        this.fileInput.value = '';
     }
 
     async loadOutfits() {
