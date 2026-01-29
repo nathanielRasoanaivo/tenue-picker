@@ -541,12 +541,12 @@ class TenuePickerApp {
             const item = document.createElement('div');
             item.className = 'gallery-item';
 
-            // Ajouter un badge si la tenue est utilisée
-            const badge = outfit.used ? '<span class="used-badge">Portée</span>' : '';
+            // Ajouter une encoche verte si la tenue est utilisée
+            const checkmark = outfit.used ? '<span class="used-checkmark">✓</span>' : '';
 
             item.innerHTML = `
                 <img src="${outfit.data}" alt="Tenue" loading="lazy">
-                ${badge}
+                ${checkmark}
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
 
