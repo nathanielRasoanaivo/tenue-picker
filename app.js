@@ -318,6 +318,7 @@ class TenuePickerApp {
         this.outfits = [];
         this.galleryExpanded = false;
         this.currentlySelectedOutfitId = null;
+        this.isProcessingFiles = false;
 
         this.initElements();
         this.init();
@@ -365,9 +366,15 @@ class TenuePickerApp {
 
     setupEventListeners() {
         // Upload
-        this.uploadBtn.addEventListener('click', () => this.fileInput.click());
-        this.addMoreBtn.addEventListener('click', () => this.fileInput.click());
-        this.uploadArea.addEventListener('click', () => this.fileInput.click());
+        this.uploadBtn.addEventListener('click', () => {
+            if (!this.isProcessingFiles) this.fileInput.click();
+        });
+        this.addMoreBtn.addEventListener('click', () => {
+            if (!this.isProcessingFiles) this.fileInput.click();
+        });
+        this.uploadArea.addEventListener('click', () => {
+            if (!this.isProcessingFiles) this.fileInput.click();
+        });
         this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
 
         // Drag & Drop
@@ -405,7 +412,19 @@ class TenuePickerApp {
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
     }
 
+    readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+
     async handleFiles(files) {
+        if (!files || files.length === 0) return;
+
+        this.isProcessingFiles = true;
         const fileArray = Array.from(files);
 
         if (fileArray.length > 1) {
@@ -437,17 +456,19 @@ class TenuePickerApp {
                     console.error('Erreur compression:', error);
 
                     // Fallback: stockage sans compression
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            await this.store.add(e.target.result);
-                            console.warn('Image ajoutée sans compression');
-                            processed++;
-                        } catch (storeError) {
-                            this.showError(`Impossible d'ajouter ${file.name}`);
+                    try {
+                        const imageData = await this.readFileAsDataURL(file);
+                        await this.store.add(imageData);
+                        console.warn('Image ajoutée sans compression');
+                        processed++;
+
+                        if (fileArray.length > 1) {
+                            this.updateUploadProgress(processed, fileArray.length);
                         }
-                    };
-                    reader.readAsDataURL(file);
+                    } catch (storeError) {
+                        console.error('Erreur ajout fichier:', storeError);
+                        this.showError(`Impossible d'ajouter ${file.name}`);
+                    }
                 }
             }
         }
@@ -455,6 +476,7 @@ class TenuePickerApp {
         await this.loadOutfits();
         this.hideUploadProgress();
         this.fileInput.value = '';
+        this.isProcessingFiles = false;
     }
 
     async loadOutfits() {
