@@ -85,6 +85,14 @@
                         <span class="label">Optimiser le stockage</span>
                     </button>
                 </div>
+
+                <!-- Groupe Calendrier -->
+                <div class="button-group">
+                    <button class="btn-secondary btn-full" id="toggleCalendarBtn">
+                        <span class="icon">📅</span>
+                        <span class="label">Voir le calendrier</span>
+                    </button>
+                </div>
             </section>
 
             <!-- Résultat -->
@@ -120,6 +128,29 @@
                     <button class="btn-text" id="toggleGalleryBtn">Voir tout</button>
                 </div>
                 <div class="gallery" id="gallery"></div>
+            </section>
+
+            <!-- Calendrier -->
+            <section class="calendar-section" id="calendarSection" style="display: none;">
+                <div class="calendar-header">
+                    <button class="btn-text" id="prevMonthBtn">← Mois précédent</button>
+                    <h2 id="calendarTitle">Janvier 2026</h2>
+                    <button class="btn-text" id="nextMonthBtn">Mois suivant →</button>
+                </div>
+                <div class="calendar" id="calendar"></div>
+            </section>
+
+            <!-- Modal édition calendrier -->
+            <section class="result-section" id="editCalendarModal" style="display: none;">
+                <div class="result-card">
+                    <h2 id="editCalendarTitle">Tenue du jour</h2>
+                    <div id="outfitSelector" class="outfit-selector"></div>
+                    <div class="result-actions">
+                        <button class="btn-secondary" id="saveCalendarEntryBtn">💾 Sauvegarder</button>
+                        <button class="btn-secondary btn-danger" id="deleteCalendarEntryBtn" style="display: none;">🗑️ Supprimer</button>
+                        <button class="btn-secondary" id="cancelEditCalendarBtn">Annuler</button>
+                    </div>
+                </div>
             </section>
         </main>
     </div>

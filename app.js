@@ -178,12 +178,13 @@ class OutfitStore {
     constructor() {
         this.dbName = 'TenuePickerDB';
         this.storeName = 'outfits';
+        this.historyStoreName = 'history';
         this.db = null;
     }
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 2);
+            const request = indexedDB.open(this.dbName, 3);
 
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -218,6 +219,17 @@ class OutfitStore {
                             cursor.continue();
                         }
                     };
+                }
+
+                // Si migration v2 → v3 : créer le store d'historique
+                if (event.oldVersion < 3) {
+                    if (!db.objectStoreNames.contains(this.historyStoreName)) {
+                        const historyStore = db.createObjectStore(this.historyStoreName, {
+                            keyPath: 'id',
+                            autoIncrement: true
+                        });
+                        historyStore.createIndex('date', 'date', { unique: false });
+                    }
                 }
             };
         });
@@ -318,6 +330,121 @@ class OutfitStore {
             request.onerror = () => reject(request.error);
         });
     }
+
+    async addToHistory(outfitId, date = new Date()) {
+        const transaction = this.db.transaction([this.historyStoreName], 'readwrite');
+        const store = transaction.objectStore(this.historyStoreName);
+
+        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        return new Promise((resolve, reject) => {
+            const request = store.add({
+                outfitId: outfitId,
+                date: dateStr,
+                timestamp: date.getTime()
+            });
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getHistoryForMonth(year, month) {
+        const transaction = this.db.transaction([this.historyStoreName], 'readonly');
+        const store = transaction.objectStore(this.historyStoreName);
+        const index = store.index('date');
+
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+
+        return new Promise((resolve, reject) => {
+            const range = IDBKeyRange.bound(startDate, endDate);
+            const request = index.getAll(range);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getAllHistory() {
+        const transaction = this.db.transaction([this.historyStoreName], 'readonly');
+        const store = transaction.objectStore(this.historyStoreName);
+
+        return new Promise((resolve, reject) => {
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getHistoryForDate(dateStr) {
+        const transaction = this.db.transaction([this.historyStoreName], 'readonly');
+        const store = transaction.objectStore(this.historyStoreName);
+        const index = store.index('date');
+
+        return new Promise((resolve, reject) => {
+            const request = index.get(dateStr);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async updateHistoryForDate(dateStr, outfitId) {
+        const transaction = this.db.transaction([this.historyStoreName], 'readwrite');
+        const store = transaction.objectStore(this.historyStoreName);
+        const index = store.index('date');
+
+        return new Promise((resolve, reject) => {
+            // Chercher l'entrée existante
+            const getRequest = index.get(dateStr);
+
+            getRequest.onsuccess = () => {
+                const existing = getRequest.result;
+
+                if (existing) {
+                    // Mettre à jour l'entrée existante
+                    existing.outfitId = outfitId;
+                    const updateRequest = store.put(existing);
+                    updateRequest.onsuccess = () => resolve();
+                    updateRequest.onerror = () => reject(updateRequest.error);
+                } else {
+                    // Créer une nouvelle entrée
+                    const date = new Date(dateStr);
+                    const addRequest = store.add({
+                        outfitId: outfitId,
+                        date: dateStr,
+                        timestamp: date.getTime()
+                    });
+                    addRequest.onsuccess = () => resolve();
+                    addRequest.onerror = () => reject(addRequest.error);
+                }
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
+
+    async deleteHistoryForDate(dateStr) {
+        const transaction = this.db.transaction([this.historyStoreName], 'readwrite');
+        const store = transaction.objectStore(this.historyStoreName);
+        const index = store.index('date');
+
+        return new Promise((resolve, reject) => {
+            const getRequest = index.get(dateStr);
+
+            getRequest.onsuccess = () => {
+                const existing = getRequest.result;
+
+                if (existing) {
+                    const deleteRequest = store.delete(existing.id);
+                    deleteRequest.onsuccess = () => resolve();
+                    deleteRequest.onerror = () => reject(deleteRequest.error);
+                } else {
+                    resolve(); // Pas d'entrée à supprimer
+                }
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
 }
 
 // Application principale
@@ -330,6 +457,11 @@ class TenuePickerApp {
         this.galleryExpanded = false;
         this.currentlySelectedOutfitId = null;
         this.isProcessingFiles = false;
+        this.calendarVisible = false;
+        this.currentCalendarYear = new Date().getFullYear();
+        this.currentCalendarMonth = new Date().getMonth() + 1;
+        this.editingDate = null;
+        this.selectedOutfitForCalendar = null;
 
         this.initElements();
         this.init();
@@ -363,6 +495,18 @@ class TenuePickerApp {
         this.importBtnInitial = document.getElementById('importBtnInitial');
         this.importInput = document.getElementById('importInput');
         this.deleteAllBtn = document.getElementById('deleteAllBtn');
+        this.toggleCalendarBtn = document.getElementById('toggleCalendarBtn');
+        this.calendarSection = document.getElementById('calendarSection');
+        this.calendar = document.getElementById('calendar');
+        this.calendarTitle = document.getElementById('calendarTitle');
+        this.prevMonthBtn = document.getElementById('prevMonthBtn');
+        this.nextMonthBtn = document.getElementById('nextMonthBtn');
+        this.editCalendarModal = document.getElementById('editCalendarModal');
+        this.editCalendarTitle = document.getElementById('editCalendarTitle');
+        this.outfitSelector = document.getElementById('outfitSelector');
+        this.saveCalendarEntryBtn = document.getElementById('saveCalendarEntryBtn');
+        this.deleteCalendarEntryBtn = document.getElementById('deleteCalendarEntryBtn');
+        this.cancelEditCalendarBtn = document.getElementById('cancelEditCalendarBtn');
     }
 
     async init() {
@@ -441,6 +585,12 @@ class TenuePickerApp {
         this.importBtnInitial.addEventListener('click', () => this.importInput.click());
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
         this.deleteAllBtn.addEventListener('click', () => this.deleteAllOutfits());
+        this.toggleCalendarBtn.addEventListener('click', () => this.toggleCalendar());
+        this.prevMonthBtn.addEventListener('click', () => this.navigateMonth(-1));
+        this.nextMonthBtn.addEventListener('click', () => this.navigateMonth(1));
+        this.saveCalendarEntryBtn.addEventListener('click', () => this.saveCalendarEntry());
+        this.deleteCalendarEntryBtn.addEventListener('click', () => this.deleteCalendarEntry());
+        this.cancelEditCalendarBtn.addEventListener('click', () => this.closeEditCalendar());
     }
 
     readFileAsDataURL(file) {
@@ -514,7 +664,30 @@ class TenuePickerApp {
 
     async loadOutfits() {
         this.outfits = await this.store.getAll();
+
+        // Synchroniser le statut 'used' avec l'historique
+        await this.syncUsedStatusWithHistory();
+
         this.updateUI();
+    }
+
+    async syncUsedStatusWithHistory() {
+        // Récupérer tout l'historique
+        const history = await this.store.getAllHistory();
+
+        // Créer un Set des IDs de tenues dans l'historique
+        const usedOutfitIds = new Set(history.map(entry => entry.outfitId));
+
+        // Mettre à jour le statut de chaque tenue
+        for (const outfit of this.outfits) {
+            const shouldBeUsed = usedOutfitIds.has(outfit.id);
+
+            // Mettre à jour seulement si le statut a changé
+            if (outfit.used !== shouldBeUsed) {
+                await this.store.update(outfit.id, { used: shouldBeUsed });
+                outfit.used = shouldBeUsed; // Mettre à jour localement aussi
+            }
+        }
     }
 
     updateUI() {
@@ -624,9 +797,10 @@ class TenuePickerApp {
     }
 
     async closeResult() {
-        // Marquer la tenue comme utilisée
+        // Marquer la tenue comme utilisée et ajouter à l'historique
         if (this.currentlySelectedOutfitId) {
             await this.store.update(this.currentlySelectedOutfitId, { used: true });
+            await this.store.addToHistory(this.currentlySelectedOutfitId);
             await this.loadOutfits();
             this.currentlySelectedOutfitId = null;
         }
@@ -844,6 +1018,232 @@ class TenuePickerApp {
             </div>
         `;
         this.weatherWidget.style.display = 'flex';
+    }
+
+    toggleCalendar() {
+        this.calendarVisible = !this.calendarVisible;
+        this.calendarSection.style.display = this.calendarVisible ? 'block' : 'none';
+
+        if (this.calendarVisible) {
+            this.toggleCalendarBtn.querySelector('.label').textContent = 'Masquer le calendrier';
+            this.renderCalendar();
+        } else {
+            this.toggleCalendarBtn.querySelector('.label').textContent = 'Voir le calendrier';
+        }
+    }
+
+    navigateMonth(direction) {
+        this.currentCalendarMonth += direction;
+
+        if (this.currentCalendarMonth > 12) {
+            this.currentCalendarMonth = 1;
+            this.currentCalendarYear++;
+        } else if (this.currentCalendarMonth < 1) {
+            this.currentCalendarMonth = 12;
+            this.currentCalendarYear--;
+        }
+
+        this.renderCalendar();
+    }
+
+    async renderCalendar() {
+        const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                           'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+        this.calendarTitle.textContent = `${monthNames[this.currentCalendarMonth - 1]} ${this.currentCalendarYear}`;
+
+        // Récupérer l'historique du mois
+        const history = await this.store.getHistoryForMonth(this.currentCalendarYear, this.currentCalendarMonth);
+
+        // Créer un map date -> outfitId
+        const historyMap = {};
+        history.forEach(entry => {
+            historyMap[entry.date] = entry.outfitId;
+        });
+
+        // Calculer le nombre de jours dans le mois
+        const daysInMonth = new Date(this.currentCalendarYear, this.currentCalendarMonth, 0).getDate();
+        const firstDay = new Date(this.currentCalendarYear, this.currentCalendarMonth - 1, 1).getDay();
+        const adjustedFirstDay = firstDay === 0 ? 6 : firstDay - 1; // Lundi = 0
+
+        // Générer le calendrier
+        let html = '<div class="calendar-grid">';
+
+        // En-têtes des jours
+        const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+        dayNames.forEach(day => {
+            html += `<div class="calendar-day-header">${day}</div>`;
+        });
+
+        // Cases vides avant le premier jour
+        for (let i = 0; i < adjustedFirstDay; i++) {
+            html += '<div class="calendar-day empty"></div>';
+        }
+
+        // Jours du mois
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${this.currentCalendarYear}-${String(this.currentCalendarMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const outfitId = historyMap[dateStr];
+            const today = new Date().toISOString().split('T')[0];
+            const isToday = dateStr === today;
+
+            html += `<div class="calendar-day ${isToday ? 'today' : ''}" data-date="${dateStr}">`;
+            html += `<div class="calendar-day-number">${day}</div>`;
+
+            if (outfitId) {
+                const outfit = this.outfits.find(o => o.id === outfitId);
+                if (outfit) {
+                    html += `
+                        <div class="calendar-outfit-container">
+                            <img src="${outfit.data}" alt="Tenue" class="calendar-outfit-thumb" data-outfit-id="${outfitId}">
+                            <button class="calendar-delete-btn" data-date="${dateStr}">×</button>
+                        </div>
+                    `;
+                }
+            }
+
+            html += '</div>';
+        }
+
+        html += '</div>';
+
+        this.calendar.innerHTML = html;
+
+        // Ajouter les event listeners sur les jours
+        this.calendar.querySelectorAll('.calendar-day:not(.empty)').forEach(dayEl => {
+            const date = dayEl.dataset.date;
+            if (!date) return; // Ignorer les jours sans date
+
+            // Event listener pour tout le jour
+            dayEl.addEventListener('click', (e) => {
+                // Si on clique sur le bouton de suppression
+                if (e.target.classList.contains('calendar-delete-btn')) {
+                    e.stopPropagation();
+                    const dateToDelete = e.target.dataset.date;
+                    this.quickDeleteCalendarEntry(dateToDelete);
+                    return;
+                }
+
+                // Si on clique directement sur une miniature, montrer les détails
+                if (e.target.classList.contains('calendar-outfit-thumb')) {
+                    e.stopPropagation();
+                    const outfitId = parseInt(e.target.dataset.outfitId);
+                    this.showOutfitDetail(outfitId);
+                    return;
+                }
+
+                // Sinon, ouvrir l'éditeur
+                this.openEditCalendar(date);
+            });
+
+            // Curseur pointer pour indiquer que c'est cliquable
+            dayEl.style.cursor = 'pointer';
+        });
+    }
+
+    showOutfitDetail(outfitId) {
+        const outfit = this.outfits.find(o => o.id === outfitId);
+        if (outfit) {
+            this.selectedOutfit.src = outfit.data;
+            this.resultSection.style.display = 'flex';
+            // Ne pas définir currentlySelectedOutfitId pour éviter de marquer comme used
+            this.currentlySelectedOutfitId = null;
+        }
+    }
+
+    async openEditCalendar(dateStr) {
+        this.editingDate = dateStr;
+
+        // Formater la date pour l'affichage
+        const date = new Date(dateStr + 'T00:00:00');
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const formattedDate = date.toLocaleDateString('fr-FR', options);
+        this.editCalendarTitle.textContent = `Tenue du ${formattedDate}`;
+
+        // Récupérer la tenue actuelle pour cette date
+        const existingEntry = await this.store.getHistoryForDate(dateStr);
+        const currentOutfitId = existingEntry ? existingEntry.outfitId : null;
+        this.selectedOutfitForCalendar = currentOutfitId;
+
+        // Afficher/masquer le bouton supprimer
+        this.deleteCalendarEntryBtn.style.display = currentOutfitId ? 'block' : 'none';
+
+        // Générer le sélecteur de tenues
+        this.renderOutfitSelector(currentOutfitId);
+
+        // Afficher le modal
+        this.editCalendarModal.style.display = 'flex';
+    }
+
+    renderOutfitSelector(selectedId) {
+        let html = '<div class="outfit-selector-grid">';
+
+        this.outfits.forEach(outfit => {
+            const isSelected = outfit.id === selectedId;
+            html += `
+                <div class="outfit-selector-item ${isSelected ? 'selected' : ''}" data-outfit-id="${outfit.id}">
+                    <img src="${outfit.data}" alt="Tenue">
+                    ${isSelected ? '<span class="selected-badge">✓</span>' : ''}
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        this.outfitSelector.innerHTML = html;
+
+        // Ajouter les event listeners
+        this.outfitSelector.querySelectorAll('.outfit-selector-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const outfitId = parseInt(item.dataset.outfitId);
+                this.selectedOutfitForCalendar = outfitId;
+
+                // Mettre à jour l'UI
+                this.outfitSelector.querySelectorAll('.outfit-selector-item').forEach(el => {
+                    el.classList.remove('selected');
+                    el.querySelector('.selected-badge')?.remove();
+                });
+
+                item.classList.add('selected');
+                item.innerHTML += '<span class="selected-badge">✓</span>';
+            });
+        });
+    }
+
+    async saveCalendarEntry() {
+        if (!this.editingDate || !this.selectedOutfitForCalendar) {
+            alert('Veuillez sélectionner une tenue');
+            return;
+        }
+
+        await this.store.updateHistoryForDate(this.editingDate, this.selectedOutfitForCalendar);
+        await this.loadOutfits();
+        await this.renderCalendar();
+        this.closeEditCalendar();
+    }
+
+    async deleteCalendarEntry() {
+        if (!this.editingDate) return;
+
+        if (confirm('Supprimer la tenue de ce jour ?')) {
+            await this.store.deleteHistoryForDate(this.editingDate);
+            await this.loadOutfits();
+            await this.renderCalendar();
+            this.closeEditCalendar();
+        }
+    }
+
+    async quickDeleteCalendarEntry(dateStr) {
+        if (confirm('Supprimer la tenue de ce jour ?')) {
+            await this.store.deleteHistoryForDate(dateStr);
+            await this.loadOutfits();
+            await this.renderCalendar();
+        }
+    }
+
+    closeEditCalendar() {
+        this.editCalendarModal.style.display = 'none';
+        this.editingDate = null;
+        this.selectedOutfitForCalendar = null;
     }
 
     registerServiceWorker() {
