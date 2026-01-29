@@ -33,18 +33,49 @@
 
             <!-- Section Sélection -->
             <section class="action-section" id="actionSection" style="display: none;">
+                <!-- Bouton principal -->
                 <button class="btn-primary" id="pickOutfitBtn">
                     🎲 Choisir ma tenue
                 </button>
-                <button class="btn-secondary" id="addMoreBtn" style="margin-top: 10px;">
-                    📸 Ajouter des tenues
-                </button>
-                <button class="btn-secondary" id="resetAllBtn" style="margin-top: 10px; display: none;">
-                    🔄 Réinitialiser les tenues
-                </button>
-                <button class="btn-secondary" id="optimizeBtn" style="margin-top: 10px;">
-                    ⚡ Optimiser le stockage
-                </button>
+
+                <!-- Groupe Gestion des tenues -->
+                <div class="button-group">
+                    <h3 class="group-title">Gestion des tenues</h3>
+                    <div class="button-row">
+                        <button class="btn-secondary btn-icon" id="addMoreBtn">
+                            <span class="icon">📸</span>
+                            <span class="label">Ajouter</span>
+                        </button>
+                        <button class="btn-secondary btn-icon" id="resetAllBtn" style="display: none;">
+                            <span class="icon">🔄</span>
+                            <span class="label">Réinitialiser</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Groupe Sauvegarde -->
+                <div class="button-group">
+                    <h3 class="group-title">Sauvegarde</h3>
+                    <div class="button-row">
+                        <button class="btn-secondary btn-icon" id="exportBtn">
+                            <span class="icon">💾</span>
+                            <span class="label">Sauvegarder</span>
+                        </button>
+                        <input type="file" id="importInput" accept=".json" hidden>
+                        <button class="btn-secondary btn-icon" id="importBtn">
+                            <span class="icon">📥</span>
+                            <span class="label">Restaurer</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Groupe Optimisation -->
+                <div class="button-group">
+                    <button class="btn-secondary btn-full" id="optimizeBtn">
+                        <span class="icon">⚡</span>
+                        <span class="label">Optimiser le stockage</span>
+                    </button>
+                </div>
             </section>
 
             <!-- Résultat -->

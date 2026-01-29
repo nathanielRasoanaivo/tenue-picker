@@ -346,6 +346,9 @@ class TenuePickerApp {
         this.resetFromModalBtn = document.getElementById('resetFromModalBtn');
         this.closeAllUsedModalBtn = document.getElementById('closeAllUsedModalBtn');
         this.weatherWidget = document.getElementById('weatherWidget');
+        this.exportBtn = document.getElementById('exportBtn');
+        this.importBtn = document.getElementById('importBtn');
+        this.importInput = document.getElementById('importInput');
     }
 
     async init() {
@@ -397,6 +400,9 @@ class TenuePickerApp {
             this.allUsedSection.style.display = 'none';
         });
         this.optimizeBtn.addEventListener('click', () => this.optimizeExistingOutfits());
+        this.exportBtn.addEventListener('click', () => this.exportOutfits());
+        this.importBtn.addEventListener('click', () => this.importInput.click());
+        this.importInput.addEventListener('change', (e) => this.importOutfits(e));
     }
 
     async handleFiles(files) {
@@ -616,6 +622,82 @@ class TenuePickerApp {
         await this.loadOutfits();
 
         alert(`✓ Optimisation terminée!\n\n${optimized} tenues optimisées\n~${(totalSaved / 1024 / 1024).toFixed(1)}MB économisés`);
+    }
+
+    exportOutfits() {
+        // Créer l'objet JSON avec les métadonnées
+        const exportData = {
+            version: 1,
+            exportDate: new Date().toISOString(),
+            outfits: this.outfits
+        };
+
+        // Convertir en JSON
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+
+        // Créer un nom de fichier avec la date
+        const date = new Date().toISOString().split('T')[0];
+        const filename = `tenues-backup-${date}.json`;
+
+        // Télécharger le fichier
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert(`✓ Sauvegarde créée!\n\n${this.outfits.length} tenues sauvegardées\nFichier: ${filename}`);
+    }
+
+    async importOutfits(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const importData = JSON.parse(text);
+
+            // Vérifier la structure du JSON
+            if (!importData.outfits || !Array.isArray(importData.outfits)) {
+                throw new Error('Format de fichier invalide');
+            }
+
+            // Demander confirmation si des tenues existent déjà
+            if (this.outfits.length > 0) {
+                const message = `Vous avez déjà ${this.outfits.length} tenue(s).\n\nVoulez-vous :\n- OK : Ajouter les tenues du fichier (${importData.outfits.length} tenues)\n- Annuler : Ne rien faire`;
+
+                if (!confirm(message)) {
+                    this.importInput.value = '';
+                    return;
+                }
+            }
+
+            // Importer les tenues
+            let imported = 0;
+            for (const outfit of importData.outfits) {
+                // Vérifier que la tenue a les champs requis
+                if (outfit.data && outfit.timestamp !== undefined) {
+                    await this.store.add(outfit.data);
+                    imported++;
+                }
+            }
+
+            // Recharger les tenues
+            await this.loadOutfits();
+
+            alert(`✓ Restauration réussie!\n\n${imported} tenues importées`);
+
+        } catch (error) {
+            console.error('Erreur import:', error);
+            alert(`❌ Erreur lors de l'importation\n\n${error.message}`);
+        } finally {
+            // Réinitialiser l'input
+            this.importInput.value = '';
+        }
     }
 
     showUploadProgress(current, total) {

@@ -171,6 +171,77 @@ h1 {
     margin-bottom: 30px;
 }
 
+/* Button Groups */
+.button-group {
+    margin-top: 24px;
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+}
+
+.group-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.button-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+/* Button with Icon */
+.btn-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 12px;
+    width: 100%;
+}
+
+.btn-icon .icon {
+    font-size: 1.8rem;
+    display: block;
+}
+
+.btn-icon .label {
+    font-size: 0.9rem;
+}
+
+.btn-full {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px;
+}
+
+.btn-full .icon {
+    font-size: 1.2rem;
+}
+
+.btn-full .label {
+    font-size: 1rem;
+}
+
+/* Responsive button rows */
+@media (max-width: 768px) {
+    .button-row {
+        grid-template-columns: 1fr;
+    }
+
+    .btn-icon .icon {
+        font-size: 1.5rem;
+    }
+}
+
 /* Result Section */
 .result-section {
     position: fixed;
