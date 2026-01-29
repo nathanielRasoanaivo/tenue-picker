@@ -1,3 +1,178 @@
+// Service météo
+class WeatherService {
+    constructor(apiKey) {
+        this.apiKey = apiKey;
+        this.cacheKey = 'weather_cache';
+        this.cacheDuration = 30 * 60 * 1000; // 30 minutes
+    }
+
+    async getWeather() {
+        // Vérifier le cache
+        const cached = this.getCachedWeather();
+        if (cached) {
+            return cached;
+        }
+
+        // Obtenir la position
+        const position = await this.getPosition();
+
+        // Appeler l'API
+        const url = `https://api.weatherapi.com/v1/current.json?key=${this.apiKey}&q=${position.latitude},${position.longitude}&lang=fr`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Erreur API météo');
+        }
+
+        const data = await response.json();
+
+        const weather = {
+            temp: Math.round(data.current.temp_c),
+            condition: data.current.condition.text,
+            icon: data.current.condition.icon,
+            timestamp: Date.now()
+        };
+
+        // Mettre en cache
+        localStorage.setItem(this.cacheKey, JSON.stringify(weather));
+
+        return weather;
+    }
+
+    getPosition() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject(new Error('Géolocalisation non supportée'));
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude
+                }),
+                (error) => reject(error),
+                { timeout: 10000 }
+            );
+        });
+    }
+
+    getCachedWeather() {
+        try {
+            const cached = localStorage.getItem(this.cacheKey);
+            if (!cached) return null;
+
+            const weather = JSON.parse(cached);
+            const age = Date.now() - weather.timestamp;
+
+            if (age < this.cacheDuration) {
+                return weather;
+            }
+
+            // Cache expiré
+            localStorage.removeItem(this.cacheKey);
+            return null;
+        } catch {
+            return null;
+        }
+    }
+}
+
+// Compression d'images
+class ImageCompressor {
+    constructor(maxDimension = 1600, quality = 0.82) {
+        this.maxDimension = maxDimension;
+        this.quality = quality;
+    }
+
+    async compress(file) {
+        return new Promise((resolve, reject) => {
+            // Validation
+            if (!file.type.startsWith('image/')) {
+                reject(new Error('Fichier non-image'));
+                return;
+            }
+
+            if (file.size > 50 * 1024 * 1024) {
+                reject(new Error('Fichier trop volumineux (max 50MB)'));
+                return;
+            }
+
+            const img = new Image();
+            const reader = new FileReader();
+
+            const timeout = setTimeout(() => {
+                reject(new Error('Timeout compression'));
+            }, 30000);
+
+            reader.onerror = () => reject(reader.error);
+
+            reader.onload = (e) => {
+                img.onload = () => {
+                    clearTimeout(timeout);
+                    try {
+                        const compressed = this._compressImage(img);
+                        resolve({
+                            data: compressed,
+                            originalSize: file.size,
+                            compressedSize: this._estimateSize(compressed)
+                        });
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+
+                img.onerror = () => reject(new Error('Image invalide'));
+                img.src = e.target.result;
+            };
+
+            reader.readAsDataURL(file);
+        });
+    }
+
+    _compressImage(img) {
+        const { width, height } = this._calculateDimensions(img.width, img.height);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Fond blanc pour PNG avec transparence
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+
+        // Dessiner image redimensionnée
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convertir en JPEG compressé
+        return canvas.toDataURL('image/jpeg', this.quality);
+    }
+
+    _calculateDimensions(width, height) {
+        // Ne pas agrandir les petites images
+        if (width <= this.maxDimension && height <= this.maxDimension) {
+            return { width, height };
+        }
+
+        // Préserver ratio d'aspect
+        const ratio = Math.min(
+            this.maxDimension / width,
+            this.maxDimension / height
+        );
+
+        return {
+            width: Math.round(width * ratio),
+            height: Math.round(height * ratio)
+        };
+    }
+
+    _estimateSize(dataUrl) {
+        const base64Length = dataUrl.length - dataUrl.indexOf(',') - 1;
+        return Math.round(base64Length * 0.75);
+    }
+}
+
 // Gestion du stockage IndexedDB
 class OutfitStore {
     constructor() {
@@ -138,6 +313,8 @@ class OutfitStore {
 class TenuePickerApp {
     constructor() {
         this.store = new OutfitStore();
+        this.compressor = new ImageCompressor(1600, 0.82);
+        this.weather = new WeatherService('0b4aecf33e6148749b390920262901');
         this.outfits = [];
         this.galleryExpanded = false;
         this.currentlySelectedOutfitId = null;
@@ -164,9 +341,11 @@ class TenuePickerApp {
         this.availableCount = document.getElementById('availableCount');
         this.toggleGalleryBtn = document.getElementById('toggleGalleryBtn');
         this.resetAllBtn = document.getElementById('resetAllBtn');
+        this.optimizeBtn = document.getElementById('optimizeBtn');
         this.allUsedSection = document.getElementById('allUsedSection');
         this.resetFromModalBtn = document.getElementById('resetFromModalBtn');
         this.closeAllUsedModalBtn = document.getElementById('closeAllUsedModalBtn');
+        this.weatherWidget = document.getElementById('weatherWidget');
     }
 
     async init() {
@@ -175,6 +354,7 @@ class TenuePickerApp {
             await this.loadOutfits();
             this.setupEventListeners();
             this.registerServiceWorker();
+            this.loadWeather();
         } catch (error) {
             console.error('Erreur initialisation:', error);
         }
@@ -216,29 +396,58 @@ class TenuePickerApp {
         this.closeAllUsedModalBtn.addEventListener('click', () => {
             this.allUsedSection.style.display = 'none';
         });
+        this.optimizeBtn.addEventListener('click', () => this.optimizeExistingOutfits());
     }
 
     async handleFiles(files) {
         const fileArray = Array.from(files);
 
+        if (fileArray.length > 1) {
+            this.showUploadProgress(0, fileArray.length);
+        }
+
+        let processed = 0;
+
         for (const file of fileArray) {
             if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
+                try {
+                    // Compression
+                    const result = await this.compressor.compress(file);
 
-                reader.onload = async (e) => {
-                    try {
-                        await this.store.add(e.target.result);
-                        await this.loadOutfits();
-                    } catch (error) {
-                        console.error('Erreur ajout image:', error);
+                    // Stockage
+                    await this.store.add(result.data);
+
+                    // Log compression
+                    const ratio = ((1 - result.compressedSize / result.originalSize) * 100).toFixed(1);
+                    console.log(`Compression: ${(result.originalSize / 1024).toFixed(0)}KB → ${(result.compressedSize / 1024).toFixed(0)}KB (${ratio}% réduction)`);
+
+                    processed++;
+
+                    if (fileArray.length > 1) {
+                        this.updateUploadProgress(processed, fileArray.length);
                     }
-                };
 
-                reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('Erreur compression:', error);
+
+                    // Fallback: stockage sans compression
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            await this.store.add(e.target.result);
+                            console.warn('Image ajoutée sans compression');
+                            processed++;
+                        } catch (storeError) {
+                            this.showError(`Impossible d'ajouter ${file.name}`);
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
             }
         }
 
-        // Réinitialiser l'input pour permettre de réajouter les mêmes fichiers
+        await this.loadOutfits();
+        this.hideUploadProgress();
         this.fileInput.value = '';
     }
 
@@ -290,7 +499,7 @@ class TenuePickerApp {
             const badge = outfit.used ? '<span class="used-badge">Portée</span>' : '';
 
             item.innerHTML = `
-                <img src="${outfit.data}" alt="Tenue">
+                <img src="${outfit.data}" alt="Tenue" loading="lazy">
                 ${badge}
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
@@ -366,6 +575,110 @@ class TenuePickerApp {
             await this.store.resetAll();
             await this.loadOutfits();
         }
+    }
+
+    async optimizeExistingOutfits() {
+        const message = `Optimiser toutes les tenues existantes?\n\nCela peut prendre quelques instants mais réduira significativement l'espace de stockage.`;
+
+        if (!confirm(message)) return;
+
+        this.showOptimizationProgress(0, this.outfits.length);
+        let optimized = 0;
+        let totalSaved = 0;
+
+        for (const outfit of this.outfits) {
+            try {
+                const response = await fetch(outfit.data);
+                const blob = await response.blob();
+                const file = new File([blob], 'outfit.jpg', { type: blob.type });
+
+                const result = await this.compressor.compress(file);
+
+                // Mise à jour si gain >20%
+                const saved = result.originalSize - result.compressedSize;
+                if (saved > result.originalSize * 0.2) {
+                    await this.store.update(outfit.id, { data: result.data });
+                    totalSaved += saved;
+                    optimized++;
+                }
+
+                this.updateOptimizationProgress(
+                    this.outfits.indexOf(outfit) + 1,
+                    this.outfits.length
+                );
+
+            } catch (error) {
+                console.error(`Erreur optimisation tenue ${outfit.id}:`, error);
+            }
+        }
+
+        this.hideOptimizationProgress();
+        await this.loadOutfits();
+
+        alert(`✓ Optimisation terminée!\n\n${optimized} tenues optimisées\n~${(totalSaved / 1024 / 1024).toFixed(1)}MB économisés`);
+    }
+
+    showUploadProgress(current, total) {
+        const overlay = document.getElementById('uploadProgress');
+        document.getElementById('uploadCurrent').textContent = current;
+        document.getElementById('uploadTotal').textContent = total;
+        overlay.style.display = 'flex';
+    }
+
+    updateUploadProgress(current, total) {
+        document.getElementById('uploadCurrent').textContent = current;
+    }
+
+    hideUploadProgress() {
+        document.getElementById('uploadProgress').style.display = 'none';
+    }
+
+    showOptimizationProgress(current, total) {
+        const overlay = document.getElementById('optimizationProgress');
+        document.getElementById('optCurrent').textContent = current;
+        document.getElementById('optTotal').textContent = total;
+        document.getElementById('optProgressBar').style.width = '0%';
+        overlay.style.display = 'flex';
+    }
+
+    updateOptimizationProgress(current, total) {
+        document.getElementById('optCurrent').textContent = current;
+        const percent = (current / total * 100).toFixed(0);
+        document.getElementById('optProgressBar').style.width = percent + '%';
+    }
+
+    hideOptimizationProgress() {
+        document.getElementById('optimizationProgress').style.display = 'none';
+    }
+
+    showError(message) {
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    async loadWeather() {
+        try {
+            const weather = await this.weather.getWeather();
+            this.displayWeather(weather);
+        } catch (error) {
+            console.error('Erreur météo:', error);
+            // Ne pas afficher le widget si erreur
+            this.weatherWidget.style.display = 'none';
+        }
+    }
+
+    displayWeather(weather) {
+        this.weatherWidget.innerHTML = `
+            <img src="https:${weather.icon}" alt="${weather.condition}">
+            <div class="weather-info">
+                <div class="weather-temp">${weather.temp}°C</div>
+                <div class="weather-condition">${weather.condition}</div>
+            </div>
+        `;
+        this.weatherWidget.style.display = 'flex';
     }
 
     registerServiceWorker() {

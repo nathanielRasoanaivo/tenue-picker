@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tenue-picker-v2';
+const CACHE_NAME = 'tenue-picker-v5';
 const urlsToCache = [
   '/tenue-picker/',
   '/tenue-picker/index.html',

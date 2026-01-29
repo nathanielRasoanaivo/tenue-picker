@@ -15,6 +15,9 @@
             <p class="subtitle">Laissez le hasard choisir pour vous</p>
         </header>
 
+        <!-- Widget Météo -->
+        <div id="weatherWidget" class="weather-widget" style="display: none;"></div>
+
         <main>
             <!-- Section Upload -->
             <section class="upload-section" id="uploadSection">
@@ -38,6 +41,9 @@
                 </button>
                 <button class="btn-secondary" id="resetAllBtn" style="margin-top: 10px; display: none;">
                     🔄 Réinitialiser les tenues
+                </button>
+                <button class="btn-secondary" id="optimizeBtn" style="margin-top: 10px;">
+                    ⚡ Optimiser le stockage
                 </button>
             </section>
 
@@ -76,6 +82,27 @@
                 <div class="gallery" id="gallery"></div>
             </section>
         </main>
+    </div>
+
+    <!-- Indicateur Upload -->
+    <div id="uploadProgress" class="progress-overlay" style="display: none;">
+        <div class="progress-card">
+            <div class="spinner"></div>
+            <p>Ajout des tenues...</p>
+            <p class="progress-text"><span id="uploadCurrent">0</span> / <span id="uploadTotal">0</span></p>
+        </div>
+    </div>
+
+    <!-- Indicateur Optimisation -->
+    <div id="optimizationProgress" class="progress-overlay" style="display: none;">
+        <div class="progress-card">
+            <div class="spinner"></div>
+            <p>Optimisation en cours...</p>
+            <p class="progress-text"><span id="optCurrent">0</span> / <span id="optTotal">0</span></p>
+            <div class="progress-bar">
+                <div id="optProgressBar" class="progress-bar-fill"></div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
