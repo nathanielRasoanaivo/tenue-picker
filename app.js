@@ -307,6 +307,17 @@ class OutfitStore {
             request.onerror = () => reject(request.error);
         });
     }
+
+    async deleteAll() {
+        const transaction = this.db.transaction([this.storeName], 'readwrite');
+        const store = transaction.objectStore(this.storeName);
+
+        return new Promise((resolve, reject) => {
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
 }
 
 // Application principale
@@ -349,7 +360,9 @@ class TenuePickerApp {
         this.weatherWidget = document.getElementById('weatherWidget');
         this.exportBtn = document.getElementById('exportBtn');
         this.importBtn = document.getElementById('importBtn');
+        this.importBtnInitial = document.getElementById('importBtnInitial');
         this.importInput = document.getElementById('importInput');
+        this.deleteAllBtn = document.getElementById('deleteAllBtn');
     }
 
     async init() {
@@ -425,7 +438,9 @@ class TenuePickerApp {
         this.optimizeBtn.addEventListener('click', () => this.optimizeExistingOutfits());
         this.exportBtn.addEventListener('click', () => this.exportOutfits());
         this.importBtn.addEventListener('click', () => this.importInput.click());
+        this.importBtnInitial.addEventListener('click', () => this.importInput.click());
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
+        this.deleteAllBtn.addEventListener('click', () => this.deleteAllOutfits());
     }
 
     readFileAsDataURL(file) {
@@ -619,6 +634,15 @@ class TenuePickerApp {
     async resetAllOutfits() {
         if (confirm('Réinitialiser toutes les tenues comme non portées ?')) {
             await this.store.resetAll();
+            await this.loadOutfits();
+        }
+    }
+
+    async deleteAllOutfits() {
+        const message = `⚠️ ATTENTION ⚠️\n\nVoulez-vous VRAIMENT supprimer TOUTES vos tenues ?\n\n${this.outfits.length} tenue(s) seront définitivement supprimées.\n\nPensez à sauvegarder avant si nécessaire !`;
+
+        if (confirm(message)) {
+            await this.store.deleteAll();
             await this.loadOutfits();
         }
     }
