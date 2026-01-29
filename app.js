@@ -555,6 +555,9 @@ class TenuePickerApp {
         outfitsToShow.forEach(outfit => {
             const item = document.createElement('div');
             item.className = 'gallery-item';
+            if (outfit.used) {
+                item.classList.add('used');
+            }
 
             // Ajouter une encoche verte si la tenue est utilisée
             const checkmark = outfit.used ? '<span class="used-checkmark">✓</span>' : '';
@@ -564,6 +567,14 @@ class TenuePickerApp {
                 ${checkmark}
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
+
+            // Toggle used status on click
+            item.addEventListener('click', (e) => {
+                // Ne pas toggle si on clique sur le bouton delete
+                if (!e.target.closest('.delete-btn')) {
+                    this.toggleUsed(outfit.id);
+                }
+            });
 
             item.querySelector('.delete-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -627,6 +638,14 @@ class TenuePickerApp {
     async deleteOutfit(id) {
         if (confirm('Supprimer cette tenue ?')) {
             await this.store.delete(id);
+            await this.loadOutfits();
+        }
+    }
+
+    async toggleUsed(id) {
+        const outfit = this.outfits.find(o => o.id === id);
+        if (outfit) {
+            await this.store.update(id, { used: !outfit.used });
             await this.loadOutfits();
         }
     }
