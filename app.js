@@ -8,7 +8,7 @@ class OutfitStore {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 1);
+            const request = indexedDB.open(this.dbName, 2);
 
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -18,12 +18,31 @@ class OutfitStore {
 
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
+                const transaction = event.target.transaction;
+
+                // Si création initiale
                 if (!db.objectStoreNames.contains(this.storeName)) {
                     const objectStore = db.createObjectStore(this.storeName, {
                         keyPath: 'id',
                         autoIncrement: true
                     });
                     objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                // Si migration v1 → v2 : ajouter le champ 'used' aux tenues existantes
+                if (event.oldVersion < 2) {
+                    const objectStore = transaction.objectStore(this.storeName);
+                    objectStore.openCursor().onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor) {
+                            const outfit = cursor.value;
+                            if (outfit.used === undefined) {
+                                outfit.used = false;
+                                cursor.update(outfit);
+                            }
+                            cursor.continue();
+                        }
+                    };
                 }
             };
         });
@@ -36,7 +55,8 @@ class OutfitStore {
         return new Promise((resolve, reject) => {
             const request = store.add({
                 data: imageData,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                used: false
             });
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
@@ -64,6 +84,54 @@ class OutfitStore {
             request.onerror = () => reject(request.error);
         });
     }
+
+    async update(id, updates) {
+        const transaction = this.db.transaction([this.storeName], 'readwrite');
+        const store = transaction.objectStore(this.storeName);
+
+        return new Promise((resolve, reject) => {
+            const getRequest = store.get(id);
+
+            getRequest.onsuccess = () => {
+                const outfit = getRequest.result;
+                if (!outfit) {
+                    reject(new Error('Tenue non trouvée'));
+                    return;
+                }
+
+                Object.assign(outfit, updates);
+                const updateRequest = store.put(outfit);
+
+                updateRequest.onsuccess = () => resolve(outfit);
+                updateRequest.onerror = () => reject(updateRequest.error);
+            };
+
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+    }
+
+    async resetAll() {
+        const transaction = this.db.transaction([this.storeName], 'readwrite');
+        const store = transaction.objectStore(this.storeName);
+
+        return new Promise((resolve, reject) => {
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const outfits = request.result;
+                const updates = outfits.map(outfit => {
+                    outfit.used = false;
+                    return store.put(outfit);
+                });
+
+                Promise.all(updates)
+                    .then(() => resolve())
+                    .catch(reject);
+            };
+
+            request.onerror = () => reject(request.error);
+        });
+    }
 }
 
 // Application principale
@@ -72,6 +140,7 @@ class TenuePickerApp {
         this.store = new OutfitStore();
         this.outfits = [];
         this.galleryExpanded = false;
+        this.currentlySelectedOutfitId = null;
 
         this.initElements();
         this.init();
@@ -92,7 +161,12 @@ class TenuePickerApp {
         this.gallerySection = document.getElementById('gallerySection');
         this.gallery = document.getElementById('gallery');
         this.outfitCount = document.getElementById('outfitCount');
+        this.availableCount = document.getElementById('availableCount');
         this.toggleGalleryBtn = document.getElementById('toggleGalleryBtn');
+        this.resetAllBtn = document.getElementById('resetAllBtn');
+        this.allUsedSection = document.getElementById('allUsedSection');
+        this.resetFromModalBtn = document.getElementById('resetFromModalBtn');
+        this.closeAllUsedModalBtn = document.getElementById('closeAllUsedModalBtn');
     }
 
     async init() {
@@ -134,6 +208,14 @@ class TenuePickerApp {
         this.rePickBtn.addEventListener('click', () => this.pickRandomOutfit());
         this.closeResultBtn.addEventListener('click', () => this.closeResult());
         this.toggleGalleryBtn.addEventListener('click', () => this.toggleGallery());
+        this.resetAllBtn.addEventListener('click', () => this.resetAllOutfits());
+        this.resetFromModalBtn.addEventListener('click', () => {
+            this.resetAllOutfits();
+            this.allUsedSection.style.display = 'none';
+        });
+        this.closeAllUsedModalBtn.addEventListener('click', () => {
+            this.allUsedSection.style.display = 'none';
+        });
     }
 
     async handleFiles(files) {
@@ -173,8 +255,17 @@ class TenuePickerApp {
         this.actionSection.style.display = hasOutfits ? 'block' : 'none';
         this.gallerySection.style.display = hasOutfits ? 'block' : 'none';
 
-        // Mettre à jour compteur
+        // Calculer les tenues disponibles
+        const availableOutfits = this.outfits.filter(outfit => !outfit.used);
+        const availableCount = availableOutfits.length;
+
+        // Mettre à jour les compteurs
         this.outfitCount.textContent = this.outfits.length;
+        this.availableCount.textContent = availableCount;
+
+        // Afficher/masquer le bouton reset (seulement si des tenues sont utilisées)
+        const hasUsedOutfits = this.outfits.some(outfit => outfit.used);
+        this.resetAllBtn.style.display = hasUsedOutfits ? 'block' : 'none';
 
         // Afficher galerie
         this.renderGallery();
@@ -194,8 +285,13 @@ class TenuePickerApp {
         outfitsToShow.forEach(outfit => {
             const item = document.createElement('div');
             item.className = 'gallery-item';
+
+            // Ajouter un badge si la tenue est utilisée
+            const badge = outfit.used ? '<span class="used-badge">Portée</span>' : '';
+
             item.innerHTML = `
                 <img src="${outfit.data}" alt="Tenue">
+                ${badge}
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
 
@@ -221,22 +317,53 @@ class TenuePickerApp {
     }
 
     pickRandomOutfit() {
-        if (this.outfits.length === 0) return;
+        // Filtrer les tenues disponibles
+        const availableOutfits = this.outfits.filter(outfit => !outfit.used);
 
-        const randomIndex = Math.floor(Math.random() * this.outfits.length);
-        const selectedOutfit = this.outfits[randomIndex];
+        // Si toutes les tenues sont utilisées
+        if (availableOutfits.length === 0) {
+            this.showAllUsedModal();
+            return;
+        }
 
+        // Sélection aléatoire parmi les disponibles
+        const randomIndex = Math.floor(Math.random() * availableOutfits.length);
+        const selectedOutfit = availableOutfits[randomIndex];
+
+        // Stocker l'ID pour le marquer plus tard
+        this.currentlySelectedOutfitId = selectedOutfit.id;
+
+        // Afficher le résultat
         this.selectedOutfit.src = selectedOutfit.data;
         this.resultSection.style.display = 'flex';
     }
 
-    closeResult() {
+    showAllUsedModal() {
+        this.allUsedSection.style.display = 'flex';
+    }
+
+    async closeResult() {
+        // Marquer la tenue comme utilisée
+        if (this.currentlySelectedOutfitId) {
+            await this.store.update(this.currentlySelectedOutfitId, { used: true });
+            await this.loadOutfits();
+            this.currentlySelectedOutfitId = null;
+        }
+
+        // Fermer le modal
         this.resultSection.style.display = 'none';
     }
 
     async deleteOutfit(id) {
         if (confirm('Supprimer cette tenue ?')) {
             await this.store.delete(id);
+            await this.loadOutfits();
+        }
+    }
+
+    async resetAllOutfits() {
+        if (confirm('Réinitialiser toutes les tenues comme non portées ?')) {
+            await this.store.resetAll();
             await this.loadOutfits();
         }
     }

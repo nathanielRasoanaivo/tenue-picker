@@ -223,6 +223,21 @@ h1 {
     object-fit: cover;
 }
 
+/* Badge "Portée" sur les tenues utilisées */
+.used-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(99, 102, 241, 0.9);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 1;
+}
+
 .gallery-item .delete-btn {
     position: absolute;
     top: 8px;

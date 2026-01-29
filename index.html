@@ -36,6 +36,9 @@
                 <button class="btn-secondary" id="addMoreBtn" style="margin-top: 10px;">
                     📸 Ajouter des tenues
                 </button>
+                <button class="btn-secondary" id="resetAllBtn" style="margin-top: 10px; display: none;">
+                    🔄 Réinitialiser les tenues
+                </button>
             </section>
 
             <!-- Résultat -->
@@ -50,10 +53,24 @@
                 </div>
             </section>
 
+            <!-- Modal Toutes Utilisées -->
+            <section class="result-section" id="allUsedSection" style="display: none;">
+                <div class="result-card">
+                    <h2>🎉 Toutes les tenues portées !</h2>
+                    <p style="margin: 20px 0; color: #94a3b8; text-align: center;">
+                        Vous avez porté toutes vos tenues. Voulez-vous recommencer ?
+                    </p>
+                    <div class="result-actions">
+                        <button class="btn-secondary" id="resetFromModalBtn">🔄 Réinitialiser</button>
+                        <button class="btn-secondary" id="closeAllUsedModalBtn">Annuler</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Galerie -->
             <section class="gallery-section" id="gallerySection" style="display: none;">
                 <div class="gallery-header">
-                    <h2>Mes tenues (<span id="outfitCount">0</span>)</h2>
+                    <h2>Mes tenues (<span id="availableCount">0</span> / <span id="outfitCount">0</span>)</h2>
                     <button class="btn-text" id="toggleGalleryBtn">Voir tout</button>
                 </div>
                 <div class="gallery" id="gallery"></div>
