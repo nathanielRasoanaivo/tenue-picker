@@ -367,15 +367,31 @@ class TenuePickerApp {
     setupEventListeners() {
         // Upload
         this.uploadBtn.addEventListener('click', () => {
-            if (!this.isProcessingFiles) this.fileInput.click();
+            if (!this.isProcessingFiles) {
+                this.isProcessingFiles = true;
+                this.fileInput.click();
+            }
         });
         this.addMoreBtn.addEventListener('click', () => {
-            if (!this.isProcessingFiles) this.fileInput.click();
+            if (!this.isProcessingFiles) {
+                this.isProcessingFiles = true;
+                this.fileInput.click();
+            }
         });
         this.uploadArea.addEventListener('click', () => {
-            if (!this.isProcessingFiles) this.fileInput.click();
+            if (!this.isProcessingFiles) {
+                this.isProcessingFiles = true;
+                this.fileInput.click();
+            }
         });
-        this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
+        this.fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                this.handleFiles(e.target.files);
+            } else {
+                // L'utilisateur a annulé la sélection
+                this.isProcessingFiles = false;
+            }
+        });
 
         // Drag & Drop
         this.uploadArea.addEventListener('dragover', (e) => {
@@ -422,9 +438,11 @@ class TenuePickerApp {
     }
 
     async handleFiles(files) {
-        if (!files || files.length === 0) return;
+        if (!files || files.length === 0) {
+            this.isProcessingFiles = false;
+            return;
+        }
 
-        this.isProcessingFiles = true;
         const fileArray = Array.from(files);
 
         if (fileArray.length > 1) {
