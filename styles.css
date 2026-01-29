@@ -208,10 +208,12 @@ h1 {
 .btn-icon .icon {
     font-size: 1.8rem;
     display: block;
+    pointer-events: none;
 }
 
 .btn-icon .label {
     font-size: 0.9rem;
+    pointer-events: none;
 }
 
 .btn-full {
@@ -225,10 +227,12 @@ h1 {
 
 .btn-full .icon {
     font-size: 1.2rem;
+    pointer-events: none;
 }
 
 .btn-full .label {
     font-size: 1rem;
+    pointer-events: none;
 }
 
 /* Responsive button rows */
