@@ -2,20 +2,20 @@
   "name": "Tenue du Jour",
   "short_name": "Tenue",
   "description": "Choisissez votre tenue du jour aléatoirement",
-  "start_url": "/tenue-picker/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#6366f1",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/tenue-picker/icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/tenue-picker/icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
