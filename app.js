@@ -580,7 +580,7 @@ class TenuePickerApp {
             this.allUsedSection.style.display = 'none';
         });
         this.optimizeBtn.addEventListener('click', () => this.optimizeExistingOutfits());
-        this.exportBtn.addEventListener('click', () => this.exportOutfits());
+        this.exportBtn.addEventListener('click', async () => await this.exportOutfits());
         this.importBtn.addEventListener('click', () => this.importInput.click());
         this.importBtnInitial.addEventListener('click', () => this.importInput.click());
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
@@ -881,12 +881,16 @@ class TenuePickerApp {
         alert(`✓ Optimisation terminée!\n\n${optimized} tenues optimisées\n~${(totalSaved / 1024 / 1024).toFixed(1)}MB économisés`);
     }
 
-    exportOutfits() {
+    async exportOutfits() {
+        // Récupérer l'historique
+        const history = await this.store.getAllHistory();
+
         // Créer l'objet JSON avec les métadonnées
         const exportData = {
-            version: 1,
+            version: 2,
             exportDate: new Date().toISOString(),
-            outfits: this.outfits
+            outfits: this.outfits,
+            history: history
         };
 
         // Convertir en JSON
@@ -907,7 +911,7 @@ class TenuePickerApp {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        alert(`✓ Sauvegarde créée!\n\n${this.outfits.length} tenues sauvegardées\nFichier: ${filename}`);
+        alert(`✓ Sauvegarde créée!\n\n${this.outfits.length} tenues sauvegardées\n${history.length} entrées de calendrier\nFichier: ${filename}`);
     }
 
     async importOutfits(event) {
@@ -925,7 +929,8 @@ class TenuePickerApp {
 
             // Demander confirmation si des tenues existent déjà
             if (this.outfits.length > 0) {
-                const message = `Vous avez déjà ${this.outfits.length} tenue(s).\n\nVoulez-vous :\n- OK : Ajouter les tenues du fichier (${importData.outfits.length} tenues)\n- Annuler : Ne rien faire`;
+                const historyCount = importData.history ? importData.history.length : 0;
+                const message = `Vous avez déjà ${this.outfits.length} tenue(s).\n\nVoulez-vous :\n- OK : Ajouter les tenues du fichier (${importData.outfits.length} tenues${historyCount > 0 ? `, ${historyCount} entrées calendrier` : ''})\n- Annuler : Ne rien faire`;
 
                 if (!confirm(message)) {
                     this.importInput.value = '';
@@ -933,20 +938,40 @@ class TenuePickerApp {
                 }
             }
 
-            // Importer les tenues
+            // Importer les tenues et créer le mapping oldId -> newId
+            const idMapping = {};
             let imported = 0;
+
             for (const outfit of importData.outfits) {
                 // Vérifier que la tenue a les champs requis
                 if (outfit.data && outfit.timestamp !== undefined) {
-                    await this.store.add(outfit.data);
+                    const oldId = outfit.id;
+                    const newId = await this.store.add(outfit.data);
+                    idMapping[oldId] = newId;
                     imported++;
+                }
+            }
+
+            // Importer l'historique si présent (version 2+)
+            let historyImported = 0;
+            if (importData.history && Array.isArray(importData.history)) {
+                for (const entry of importData.history) {
+                    // Mapper l'ancien ID vers le nouveau
+                    const newOutfitId = idMapping[entry.outfitId];
+
+                    // Si la tenue a été importée avec succès
+                    if (newOutfitId !== undefined) {
+                        await this.store.updateHistoryForDate(entry.date, newOutfitId);
+                        historyImported++;
+                    }
                 }
             }
 
             // Recharger les tenues
             await this.loadOutfits();
 
-            alert(`✓ Restauration réussie!\n\n${imported} tenues importées`);
+            const message = `✓ Restauration réussie!\n\n${imported} tenues importées${historyImported > 0 ? `\n${historyImported} entrées calendrier restaurées` : ''}`;
+            alert(message);
 
         } catch (error) {
             console.error('Erreur import:', error);

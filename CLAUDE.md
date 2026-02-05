@@ -131,15 +131,18 @@ Defines PWA installation metadata with relative paths.
 
 #### Export Flow
 1. User clicks "Sauvegarder mes tenues"
-2. Create JSON with version, exportDate, and outfits array
-3. Download as `tenues-backup-YYYY-MM-DD.json`
+2. Retrieve all outfits and calendar history
+3. Create JSON with version (2), exportDate, outfits array, and history array
+4. Download as `tenues-backup-YYYY-MM-DD.json`
 
 #### Import Flow
 1. User clicks "Restaurer mes tenues" (available even when empty)
 2. Parse JSON file
 3. Confirm if outfits exist (option to add or cancel)
-4. Add each outfit via `store.add(outfit.data)`
-5. Refresh gallery
+4. Add each outfit via `store.add(outfit.data)` and create ID mapping (oldId → newId)
+5. Import history entries using ID mapping to link to newly created outfits
+6. Existing calendar entries are overwritten if same date
+7. Refresh gallery
 
 ## Development
 
@@ -229,10 +232,10 @@ Buttons are organized into logical groups:
 
 ### Export/Import Format
 
-**JSON structure:**
+**JSON structure (version 2):**
 ```json
 {
-  "version": 1,
+  "version": 2,
   "exportDate": "2026-01-29T10:30:00.000Z",
   "outfits": [
     {
@@ -241,14 +244,24 @@ Buttons are organized into logical groups:
       "timestamp": 1706521800000,
       "used": false
     }
+  ],
+  "history": [
+    {
+      "id": 1,
+      "outfitId": 1,
+      "date": "2026-01-29",
+      "timestamp": 1706521800000
+    }
   ]
 }
 ```
 
 **Compatibility:**
+- Version 1 exports (without `history` field) are still compatible
 - Old exports (without `used` field) are compatible
-- Import only uses `data` field
-- New entries always get `used: false`
+- Import maps outfit IDs from export to new auto-generated IDs
+- History entries are restored using the ID mapping
+- Existing calendar entries are overwritten if same date
 
 ### Path Configuration
 

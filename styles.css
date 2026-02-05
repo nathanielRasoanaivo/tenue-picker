@@ -23,12 +23,19 @@ body {
     color: var(--text);
     line-height: 1.6;
     min-height: 100vh;
+    overflow-x: hidden;
+}
+
+html {
+    overflow-x: hidden;
 }
 
 .container {
     max-width: 600px;
     margin: 0 auto;
     padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* Header */
@@ -88,6 +95,8 @@ h1 {
 /* Upload Section */
 .upload-section {
     margin-bottom: 30px;
+    width: 100%;
+    max-width: 100%;
 }
 
 .upload-area {
@@ -180,6 +189,8 @@ h1 {
 /* Action Section */
 .action-section {
     margin-bottom: 30px;
+    width: 100%;
+    max-width: 100%;
 }
 
 /* Button Groups */
@@ -189,6 +200,8 @@ h1 {
     border-radius: 16px;
     padding: 20px;
     box-shadow: var(--shadow);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .group-title {
@@ -306,6 +319,8 @@ h1 {
 /* Gallery */
 .gallery-section {
     margin-top: 40px;
+    width: 100%;
+    max-width: 100%;
 }
 
 .gallery-header {
@@ -497,6 +512,9 @@ h1 {
 /* Calendar Section */
 .calendar-section {
     margin-top: 40px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 .calendar-header {
@@ -519,6 +537,8 @@ h1 {
     padding: 16px;
     border-radius: 16px;
     box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 100%;
 }
 
 .calendar-day-header {
@@ -664,7 +684,8 @@ h1 {
 /* Responsive */
 @media (max-width: 768px) {
     .container {
-        padding: 16px;
+        padding: 12px;
+        max-width: 100%;
     }
 
     h1 {
@@ -684,11 +705,51 @@ h1 {
         order: -1;
     }
 
+    .calendar-grid {
+        gap: 4px;
+        padding: 8px;
+    }
+
     .calendar-day {
-        min-height: 60px;
+        min-height: 50px;
+        padding: 2px;
     }
 
     .calendar-day-number {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
+    }
+
+    .calendar-delete-btn {
+        width: 18px;
+        height: 18px;
+        font-size: 0.85rem;
+        top: 1px;
+        right: 1px;
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 375px) {
+    .container {
+        padding: 8px;
+    }
+
+    .calendar-grid {
+        gap: 2px;
+        padding: 6px;
+    }
+
+    .calendar-day {
+        min-height: 45px;
+        padding: 1px;
+    }
+
+    .calendar-day-number {
+        font-size: 0.6rem;
+        margin-bottom: 2px;
+    }
+
+    .button-group {
+        padding: 16px;
     }
 }
