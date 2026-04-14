@@ -982,7 +982,7 @@ class TenuePickerApp {
                 // Vérifier que la tenue a les champs requis
                 if (outfit.data && outfit.timestamp !== undefined) {
                     const oldId = outfit.id;
-                    const newId = await this.store.add(outfit.data, outfit.season || 'toutes');
+                    const newId = await this.store.add(outfit.data, outfit.season || 'hiver');
                     idMapping[oldId] = newId;
                     imported++;
                 }
