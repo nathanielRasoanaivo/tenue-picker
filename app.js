@@ -184,7 +184,7 @@ class OutfitStore {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 3);
+            const request = indexedDB.open(this.dbName, 4);
 
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -221,6 +221,22 @@ class OutfitStore {
                     };
                 }
 
+                // Si migration v3 → v4 : ajouter le champ 'season' aux tenues existantes
+                if (event.oldVersion < 4) {
+                    const outfitStore = transaction.objectStore(this.storeName);
+                    outfitStore.openCursor().onsuccess = (cursorEvent) => {
+                        const cursor = cursorEvent.target.result;
+                        if (cursor) {
+                            const outfit = cursor.value;
+                            if (outfit.season === undefined) {
+                                outfit.season = 'hiver';
+                                cursor.update(outfit);
+                            }
+                            cursor.continue();
+                        }
+                    };
+                }
+
                 // Si migration v2 → v3 : créer le store d'historique
                 if (event.oldVersion < 3) {
                     if (!db.objectStoreNames.contains(this.historyStoreName)) {
@@ -235,7 +251,7 @@ class OutfitStore {
         });
     }
 
-    async add(imageData) {
+    async add(imageData, season = 'toutes') {
         const transaction = this.db.transaction([this.storeName], 'readwrite');
         const store = transaction.objectStore(this.storeName);
 
@@ -243,7 +259,8 @@ class OutfitStore {
             const request = store.add({
                 data: imageData,
                 timestamp: Date.now(),
-                used: false
+                used: false,
+                season: season
             });
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
@@ -457,6 +474,7 @@ class TenuePickerApp {
         this.galleryExpanded = false;
         this.currentlySelectedOutfitId = null;
         this.isProcessingFiles = false;
+        this.activeSeason = localStorage.getItem('activeSeason') || this.detectSeason();
         this.calendarVisible = false;
         this.currentCalendarYear = new Date().getFullYear();
         this.currentCalendarMonth = new Date().getMonth() + 1;
@@ -507,6 +525,7 @@ class TenuePickerApp {
         this.saveCalendarEntryBtn = document.getElementById('saveCalendarEntryBtn');
         this.deleteCalendarEntryBtn = document.getElementById('deleteCalendarEntryBtn');
         this.cancelEditCalendarBtn = document.getElementById('cancelEditCalendarBtn');
+        this.seasonFilter = document.getElementById('seasonFilter');
     }
 
     async init() {
@@ -514,6 +533,7 @@ class TenuePickerApp {
             await this.store.init();
             await this.loadOutfits();
             this.setupEventListeners();
+            this.updateSeasonUI();
             this.registerServiceWorker();
             this.loadWeather();
         } catch (error) {
@@ -586,6 +606,9 @@ class TenuePickerApp {
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
         this.deleteAllBtn.addEventListener('click', () => this.deleteAllOutfits());
         this.toggleCalendarBtn.addEventListener('click', () => this.toggleCalendar());
+        this.seasonFilter.querySelectorAll('.season-pill').forEach(pill => {
+            pill.addEventListener('click', () => this.setActiveSeason(pill.dataset.season));
+        });
         this.prevMonthBtn.addEventListener('click', () => this.navigateMonth(-1));
         this.nextMonthBtn.addEventListener('click', () => this.navigateMonth(1));
         this.saveCalendarEntryBtn.addEventListener('click', () => this.saveCalendarEntry());
@@ -622,8 +645,8 @@ class TenuePickerApp {
                     // Compression
                     const result = await this.compressor.compress(file);
 
-                    // Stockage
-                    await this.store.add(result.data);
+                    // Stockage avec la saison active
+                    await this.store.add(result.data, this.activeSeason);
 
                     // Log compression
                     const ratio = ((1 - result.compressedSize / result.originalSize) * 100).toFixed(1);
@@ -641,7 +664,7 @@ class TenuePickerApp {
                     // Fallback: stockage sans compression
                     try {
                         const imageData = await this.readFileAsDataURL(file);
-                        await this.store.add(imageData);
+                        await this.store.add(imageData, this.activeSeason);
                         console.warn('Image ajoutée sans compression');
                         processed++;
 
@@ -698,12 +721,15 @@ class TenuePickerApp {
         this.actionSection.style.display = hasOutfits ? 'block' : 'none';
         this.gallerySection.style.display = hasOutfits ? 'block' : 'none';
 
-        // Calculer les tenues disponibles
-        const availableOutfits = this.outfits.filter(outfit => !outfit.used);
+        // Tenues filtrées par saison
+        const filtered = this.getFilteredOutfits();
+
+        // Calculer les tenues disponibles (non portées, filtrées par saison)
+        const availableOutfits = filtered.filter(outfit => !outfit.used);
         const availableCount = availableOutfits.length;
 
         // Mettre à jour les compteurs
-        this.outfitCount.textContent = this.outfits.length;
+        this.outfitCount.textContent = filtered.length;
         this.availableCount.textContent = availableCount;
 
         // Afficher/masquer le bouton reset (seulement si des tenues sont utilisées)
@@ -717,11 +743,13 @@ class TenuePickerApp {
     renderGallery() {
         this.gallery.innerHTML = '';
 
-        const displayCount = this.galleryExpanded ? this.outfits.length : Math.min(6, this.outfits.length);
-        const outfitsToShow = this.outfits.slice(0, displayCount);
+        const filtered = this.getFilteredOutfits();
+        const displayCount = this.galleryExpanded ? filtered.length : Math.min(6, filtered.length);
+        const outfitsToShow = filtered.slice(0, displayCount);
 
         if (outfitsToShow.length === 0) {
-            this.gallery.innerHTML = '<div class="empty-state"><span>👔</span><p>Aucune tenue</p></div>';
+            const seasonLabel = this.activeSeason === 'toutes' ? '' : ` pour cette saison`;
+            this.gallery.innerHTML = `<div class="empty-state"><span>👔</span><p>Aucune tenue${seasonLabel}</p></div>`;
             return;
         }
 
@@ -732,21 +760,27 @@ class TenuePickerApp {
                 item.classList.add('used');
             }
 
-            // Ajouter une encoche verte si la tenue est utilisée
+            // Encoche verte si portée + badge saison
             const checkmark = outfit.used ? '<span class="used-checkmark">✓</span>' : '';
+            const seasonEmoji = this.getSeasonEmoji(outfit.season);
 
             item.innerHTML = `
                 <img src="${outfit.data}" alt="Tenue" loading="lazy">
                 ${checkmark}
+                <span class="season-badge" data-id="${outfit.id}" title="Changer la saison">${seasonEmoji}</span>
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
 
             // Toggle used status on click
             item.addEventListener('click', (e) => {
-                // Ne pas toggle si on clique sur le bouton delete
-                if (!e.target.closest('.delete-btn')) {
+                if (!e.target.closest('.delete-btn') && !e.target.closest('.season-badge')) {
                     this.toggleUsed(outfit.id);
                 }
+            });
+
+            item.querySelector('.season-badge').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.cycleSeason(outfit.id);
             });
 
             item.querySelector('.delete-btn').addEventListener('click', (e) => {
@@ -758,7 +792,8 @@ class TenuePickerApp {
         });
 
         // Mettre à jour bouton toggle
-        if (this.outfits.length > 6) {
+        this.toggleGalleryBtn.style.display = '';
+        if (filtered.length > 6) {
             this.toggleGalleryBtn.textContent = this.galleryExpanded ? 'Voir moins' : 'Voir tout';
         } else {
             this.toggleGalleryBtn.style.display = 'none';
@@ -771,8 +806,9 @@ class TenuePickerApp {
     }
 
     pickRandomOutfit() {
-        // Filtrer les tenues disponibles
-        const availableOutfits = this.outfits.filter(outfit => !outfit.used);
+        // Filtrer les tenues disponibles (par saison + non portées)
+        const filtered = this.getFilteredOutfits();
+        const availableOutfits = filtered.filter(outfit => !outfit.used);
 
         // Si toutes les tenues sont utilisées
         if (availableOutfits.length === 0) {
@@ -946,7 +982,7 @@ class TenuePickerApp {
                 // Vérifier que la tenue a les champs requis
                 if (outfit.data && outfit.timestamp !== undefined) {
                     const oldId = outfit.id;
-                    const newId = await this.store.add(outfit.data);
+                    const newId = await this.store.add(outfit.data, outfit.season || 'toutes');
                     idMapping[oldId] = newId;
                     imported++;
                 }
@@ -1269,6 +1305,47 @@ class TenuePickerApp {
         this.editCalendarModal.style.display = 'none';
         this.editingDate = null;
         this.selectedOutfitForCalendar = null;
+    }
+
+    detectSeason() {
+        const month = new Date().getMonth(); // 0-11
+        if (month >= 5 && month <= 7) return 'ete';       // Jun-Août
+        if (month === 11 || month <= 1) return 'hiver';   // Déc-Fév
+        return 'mi-saison';                                // Mar-Mai, Sep-Nov
+    }
+
+    setActiveSeason(season) {
+        this.activeSeason = season;
+        localStorage.setItem('activeSeason', season);
+        this.updateSeasonUI();
+        this.updateUI();
+    }
+
+    updateSeasonUI() {
+        document.querySelectorAll('.season-pill').forEach(pill => {
+            pill.classList.toggle('active', pill.dataset.season === this.activeSeason);
+        });
+    }
+
+    getFilteredOutfits() {
+        if (this.activeSeason === 'toutes') return this.outfits;
+        return this.outfits.filter(o => o.season === this.activeSeason || o.season === 'toutes');
+    }
+
+    async cycleSeason(id) {
+        const seasons = ['ete', 'mi-saison', 'hiver', 'toutes'];
+        const outfit = this.outfits.find(o => o.id === id);
+        if (outfit) {
+            const currentIndex = seasons.indexOf(outfit.season || 'toutes');
+            const nextSeason = seasons[(currentIndex + 1) % seasons.length];
+            await this.store.update(id, { season: nextSeason });
+            await this.loadOutfits();
+        }
+    }
+
+    getSeasonEmoji(season) {
+        const emojis = { ete: '☀️', 'mi-saison': '🍂', hiver: '❄️', toutes: '🔄' };
+        return emojis[season] || '🔄';
     }
 
     registerServiceWorker() {

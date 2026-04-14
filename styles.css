@@ -92,6 +92,60 @@ h1 {
     text-transform: capitalize;
 }
 
+/* Season Filter */
+.season-filter {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.season-pill {
+    border: 2px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: var(--text);
+}
+
+.season-pill:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.season-pill.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* Season Badge on gallery items */
+.season-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    z-index: 1;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.season-badge:hover {
+    transform: scale(1.15);
+}
+
+.season-badge:active {
+    transform: scale(0.95);
+}
+
 /* Upload Section */
 .upload-section {
     margin-bottom: 30px;
