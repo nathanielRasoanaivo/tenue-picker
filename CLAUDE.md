@@ -9,35 +9,63 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Features
 
 - Random outfit selection with worn outfit tracking
+- **Season system** (été, mi-saison, hiver, toutes) with filter and per-outfit tagging
 - Image compression (1600px max, 82% quality JPEG)
-- Export/import backup system (JSON)
+- **Image rotation** (90° clockwise per click, saved to DB)
+- Export/import backup system (JSON with season data)
 - Manual toggle of worn status
 - Weather widget integration
+- **Calendar** with outfit history (always visible, no toggle)
+- **Tab-based navigation** (Tenue / Paramètres)
 - Lazy loading for gallery images
 - Offline-first PWA architecture
 
 ## Architecture
 
+### UI Layout
+
+The app uses a **tab bar** at the top replacing the traditional header:
+
+**Tab 1 — Tenue** (main view):
+- Weather widget
+- Season filter pills (été, mi-saison, hiver, toutes)
+- "Choisir ma tenue" button
+- Calendar (always visible when outfits exist)
+- Gallery with season badges and rotate buttons
+
+**Tab 2 — Paramètres**:
+- Ajouter des photos
+- Réinitialiser / Tout supprimer
+- Sauvegarder / Restaurer
+- Optimiser le stockage
+
 ### Core Components
 
-#### OutfitStore (app.js:177-330)
+#### OutfitStore (app.js)
 Handles all IndexedDB operations for storing outfit images.
 
 **Database:**
 - Name: `TenuePickerDB`
-- Version: 2 (v2 added `used` field)
+- Version: 4 (v2: `used` field, v3: history store, v4: `season` field)
 - Object store: `outfits` with auto-incrementing `id` and `timestamp` index
+- Object store: `history` with auto-incrementing `id` and `date` index
 
 **Methods:**
 - `init()`: Initialize database and handle migrations
-- `add(imageData)`: Add new outfit with `used: false` by default
+- `add(imageData, season)`: Add new outfit with `used: false` and season tag
 - `getAll()`: Retrieve all outfits
 - `delete(id)`: Delete specific outfit
-- `update(id, updates)`: Update outfit fields (e.g., toggle `used` status)
+- `update(id, updates)`: Update outfit fields (used, season, data)
 - `resetAll()`: Mark all outfits as unworn (`used: false`)
 - `deleteAll()`: Clear all outfits from database
+- `addToHistory(outfitId, date)`: Record outfit worn on date
+- `getHistoryForMonth(year, month)`: Get calendar data for a month
+- `getAllHistory()`: Get full history
+- `getHistoryForDate(dateStr)`: Get outfit for a specific date
+- `updateHistoryForDate(dateStr, outfitId)`: Set/update outfit for a date
+- `deleteHistoryForDate(dateStr)`: Remove outfit from a date
 
-#### ImageCompressor (app.js:82-174)
+#### ImageCompressor (app.js)
 Compresses uploaded images to reduce storage size.
 
 **Configuration:**
@@ -46,13 +74,7 @@ Compresses uploaded images to reduce storage size.
 - Timeout: 30 seconds
 - Max file size: 50MB
 
-**Features:**
-- Preserves aspect ratio
-- White background for transparent PNGs
-- Estimates compression savings
-- Fallback to original if compression fails
-
-#### WeatherService (app.js:2-79)
+#### WeatherService (app.js)
 Fetches weather data for outfit selection context.
 
 **Configuration:**
@@ -60,23 +82,16 @@ Fetches weather data for outfit selection context.
 - Cache duration: 30 minutes
 - Language: French
 
-#### TenuePickerApp (app.js:332-end)
+#### TenuePickerApp (app.js)
 Main application class managing UI state and user interactions.
 
-**UI States:**
-- Upload screen (no outfits)
-- Action screen (with gallery and controls)
-- Result modal (outfit selection)
-- All-used modal (when all outfits worn)
-
 **Key Features:**
-- File upload with drag-and-drop
-- Gallery with expand/collapse (6 items default)
-- Click outfit to toggle worn status
-- Export/import backup system
-- Weather integration
-- Upload progress indicator
-- Optimization tool for existing outfits
+- Tab navigation (switchTab)
+- Season filter with auto-detection and localStorage persistence
+- Season cycling on gallery badges
+- Image rotation via canvas (rotateOutfit)
+- Calendar rendering (always visible, no toggle)
+- Calendar delete button shown on thumbnail tap (show-delete pattern)
 
 ### PWA Features
 
@@ -84,25 +99,18 @@ Main application class managing UI state and user interactions.
 Implements Cache-First strategy for offline functionality.
 
 **Configuration:**
-- Cache name: `tenue-picker-v6`
+- Cache name: `tenue-picker-v8`
 - Relative paths (works locally and on GitHub Pages)
 - Auto-cleans old cache versions on activation
 
 **Cached assets:**
-- `./` (root)
-- `./index.html`
-- `./styles.css`
-- `./app.js`
-- `./manifest.json`
+- `./`, `./index.html`, `./styles.css`, `./app.js`, `./manifest.json`, `./icon.png`
 
 #### Manifest (manifest.json)
-Defines PWA installation metadata with relative paths.
-
-**Configuration:**
 - Start URL: `./` (relative)
 - Display: standalone
 - Orientation: portrait
-- Icons: 192x192 and 512x512 (relative paths)
+- Icon: `./icon.png` (512x512, used for both 192 and 512 sizes)
 
 ### Data Flow
 
@@ -110,53 +118,57 @@ Defines PWA installation metadata with relative paths.
 1. User selects images via file input or drag-and-drop
 2. `isProcessingFiles` flag set to prevent duplicate triggers
 3. Each image compressed via `ImageCompressor`
-4. Compressed data stored in IndexedDB with `used: false`
+4. Compressed data stored in IndexedDB with `used: false` and `season: activeSeason`
 5. Gallery refreshed to show new outfits
 6. Flag reset when complete
 
 #### Selection Flow
 1. User clicks "Choisir ma tenue"
-2. Filter outfits where `used: false`
-3. If none available, show "all used" modal
-4. Random selection from available outfits
-5. Display in result modal
-6. On close ("C'est bon"), mark as `used: true`
-7. On re-pick, try again without marking
+2. Filter outfits by active season (`getFilteredOutfits`)
+3. Filter remaining by `used: false`
+4. If none available, show "all used" modal
+5. Random selection from available outfits
+6. Display in result modal
+7. On close ("C'est bon"), mark as `used: true` and add to history
+8. On re-pick, try again without marking
 
-#### Manual Toggle Flow
-1. User clicks outfit in gallery
-2. `toggleUsed(id)` inverts `used` status
-3. Database updated via `store.update()`
-4. Gallery refreshed to show/hide checkmark
+#### Season System
+- **Filter pills**: été, mi-saison, hiver, toutes — affects gallery, counts, and picker
+- **Auto-detection**: Jun-Aug → été, Dec-Feb → hiver, else → mi-saison
+- **Persistence**: active season saved in localStorage
+- **Gallery badge**: emoji badge (bottom-left) on each outfit, clickable to cycle season
+- **Upload tagging**: new photos tagged with the currently active season
+- **DB migration**: existing outfits (pre-v4) default to `hiver`
+- **Import fallback**: old backups without season field import as `hiver`
+
+#### Rotation Flow
+1. User clicks ↻ button on gallery item
+2. Image loaded into canvas, rotated 90° clockwise
+3. Re-encoded as JPEG at 82% quality
+4. Updated in IndexedDB immediately
+5. Gallery refreshed
 
 #### Export Flow
-1. User clicks "Sauvegarder mes tenues"
-2. Retrieve all outfits and calendar history
+1. User clicks "Sauvegarder" in Paramètres tab
+2. Retrieve all outfits (including season field) and calendar history
 3. Create JSON with version (2), exportDate, outfits array, and history array
 4. Download as `tenues-backup-YYYY-MM-DD.json`
 
 #### Import Flow
-1. User clicks "Restaurer mes tenues" (available even when empty)
+1. User clicks "Restaurer" in Paramètres tab
 2. Parse JSON file
 3. Confirm if outfits exist (option to add or cancel)
-4. Add each outfit via `store.add(outfit.data)` and create ID mapping (oldId → newId)
-5. Import history entries using ID mapping to link to newly created outfits
-6. Existing calendar entries are overwritten if same date
-7. Refresh gallery
+4. Add each outfit via `store.add(outfit.data, outfit.season || 'hiver')`
+5. Create ID mapping (oldId → newId)
+6. Import history entries using ID mapping
+7. Existing calendar entries are overwritten if same date
 
 ## Development
 
 ### Running Locally
 
-The app requires an HTTP server (browsers block some features on `file://` protocol):
-
 ```bash
-# Option 1: Node.js http-server
-npm install -g http-server
-http-server -p 8080
-
-# Option 2: Python
-python -m http.server 8080
+python3 -m http.server 8080
 ```
 
 Access at `http://localhost:8080`
@@ -166,7 +178,6 @@ Access at `http://localhost:8080`
 - Service Worker requires HTTPS (or localhost)
 - Test installation on mobile: Chrome → "Install app" or Safari → "Add to Home Screen"
 - Test offline mode: DevTools → Application → Service Workers → Offline checkbox
-- Clear Service Worker cache: DevTools → Application → Service Workers → Unregister
 
 ## Key Implementation Details
 
@@ -177,57 +188,26 @@ Images are stored as base64 data URLs in IndexedDB. Each outfit object has:
 - `data`: Base64-encoded JPEG image (compressed)
 - `timestamp`: Creation timestamp
 - `used`: Boolean indicating if outfit was worn
+- `season`: String — `ete`, `mi-saison`, `hiver`, or `toutes`
 
-**Storage considerations:**
-- Base64 increases size by ~33% vs binary
-- Compression typically achieves 70-85% size reduction
-- Optimization tool available to re-compress existing outfits
+### Calendar Behavior
 
-### Outfit Tracking System
-
-The `used` field tracks worn outfits:
-- Set to `false` on creation/import
-- Set to `true` when user confirms outfit selection
-- Can be toggled manually by clicking outfit in gallery
-- "Réinitialiser" button marks all as unworn
-- Green checkmark (✓) displays on worn outfits
-
-### Button Organization
-
-Buttons are organized into logical groups:
-
-**Gestion des tenues:**
-- Ajouter (add outfits)
-- Réinitialiser (reset all to unworn) - only visible if some worn
-- Tout supprimer (delete all with strong confirmation)
-
-**Sauvegarde:**
-- Sauvegarder (export JSON backup)
-- Restaurer (import JSON backup)
-
-**Optimisation:**
-- Optimiser le stockage (re-compress existing outfits)
-
-### Mobile Optimizations
-
-**Click handling:**
-- `pointer-events: none` on button icons/labels to prevent event capture
-- `isProcessingFiles` flag prevents file selector re-opening
-- Flag set before opening selector (not in change handler)
-- Proper stopPropagation on delete buttons
-
-**Touch feedback:**
-- Cursor pointer on gallery items
-- Scale animation on click
-- Hover effects with transform
+- Always visible when outfits exist (no toggle button)
+- Rendered in `updateUI()` automatically
+- Delete button hidden by default on thumbnails
+- First tap on thumbnail → shows delete button (`.show-delete` class)
+- Second tap → opens outfit detail
+- Tap elsewhere → hides delete button and opens calendar editor
 
 ### Gallery Behavior
 
-- Default view: 6 outfits maximum
-- "Voir tout" button when >6 outfits
-- Click outfit to toggle worn status (except delete button)
-- Green checkmark on worn outfits (top-left corner)
-- Delete button on each item (top-right corner, always visible on mobile)
+- Default view: 6 outfits maximum (filtered by active season)
+- "Voir tout" button when >6 filtered outfits
+- Click outfit to toggle worn status
+- Green checkmark (✓) on worn outfits (top-left)
+- Season badge with emoji (bottom-left, clickable to cycle)
+- Rotate button ↻ (bottom-right, 90° clockwise)
+- Delete button × (top-right)
 - Lazy loading via `loading="lazy"` attribute
 
 ### Export/Import Format
@@ -242,7 +222,8 @@ Buttons are organized into logical groups:
       "id": 1,
       "data": "data:image/jpeg;base64,...",
       "timestamp": 1706521800000,
-      "used": false
+      "used": false,
+      "season": "hiver"
     }
   ],
   "history": [
@@ -257,34 +238,32 @@ Buttons are organized into logical groups:
 ```
 
 **Compatibility:**
-- Version 1 exports (without `history` field) are still compatible
-- Old exports (without `used` field) are compatible
-- Import maps outfit IDs from export to new auto-generated IDs
-- History entries are restored using the ID mapping
-- Existing calendar entries are overwritten if same date
+- Old exports without `season` field → imported as `hiver`
+- Old exports without `history` field → still compatible
+- Old exports without `used` field → still compatible
+
+### Icon
+
+**Always use `icon.png`** (512x512). Never reference `icon-192.png` or `icon-512.png` (deleted).
 
 ### Path Configuration
 
 All paths are relative (no `/tenue-picker/` prefix):
 - Works in local development
 - Works on GitHub Pages
-- Manifest uses `./` for start_url
-- Service Worker uses `./` for cached resources
-- Icons use relative paths
 
 ## File Structure
 
 ```
 /
-├── index.html       # Main HTML structure
-├── app.js          # All JavaScript (WeatherService, ImageCompressor, OutfitStore, TenuePickerApp)
-├── styles.css      # All styles with responsive design
-├── sw.js           # Service Worker for offline functionality
-├── manifest.json   # PWA manifest with relative paths
-├── icon-192.png    # PWA icon 192x192
-├── icon-512.png    # PWA icon 512x512
-├── README.md       # French documentation
-└── CLAUDE.md       # This file
+├── index.html       # Main HTML with tab bar layout
+├── app.js           # All JavaScript (WeatherService, ImageCompressor, OutfitStore, TenuePickerApp)
+├── styles.css       # All styles with responsive design and tab bar
+├── sw.js            # Service Worker (cache v8)
+├── manifest.json    # PWA manifest
+├── icon.png         # App icon (512x512, used for all sizes)
+├── README.md        # French documentation
+└── CLAUDE.md        # This file
 ```
 
 ## Language Notes
