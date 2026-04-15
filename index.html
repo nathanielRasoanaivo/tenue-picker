@@ -6,50 +6,86 @@
     <meta name="theme-color" content="#6366f1">
     <title>Tenue du Jour</title>
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>👔 Tenue du Jour</h1>
-            <p class="subtitle">Laissez le hasard choisir pour vous</p>
-        </header>
-
-        <!-- Widget Météo -->
-        <div id="weatherWidget" class="weather-widget" style="display: none;"></div>
+        <!-- Tab Bar -->
+        <nav class="tab-bar" id="tabBar">
+            <button class="tab active" data-tab="tenue">
+                <img src="icon.png" alt="Tenue" class="tab-icon">
+                <span>Tenue</span>
+            </button>
+            <button class="tab" data-tab="parametres">
+                <span class="tab-emoji">⚙️</span>
+                <span>Paramètres</span>
+            </button>
+        </nav>
 
         <main>
-            <!-- Section Upload -->
-            <section class="upload-section" id="uploadSection">
-                <div class="upload-area" id="uploadArea">
-                    <input type="file" id="fileInput" accept="image/*" multiple hidden>
-                    <div class="upload-content">
-                        <span class="upload-icon">📸</span>
-                        <p>Cliquez ou glissez vos photos de tenues</p>
-                        <button class="btn-secondary" id="uploadBtn">Ajouter des photos</button>
+            <!-- ===== ONGLET TENUE ===== -->
+            <div class="tab-content active" id="tabTenue">
+
+                <!-- Widget Météo -->
+                <div id="weatherWidget" class="weather-widget" style="display: none;"></div>
+
+                <!-- Section Upload (quand aucune tenue) -->
+                <section class="upload-section" id="uploadSection">
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+                        <div class="upload-content">
+                            <span class="upload-icon">📸</span>
+                            <p>Cliquez ou glissez vos photos de tenues</p>
+                            <button class="btn-secondary" id="uploadBtn">Ajouter des photos</button>
+                        </div>
                     </div>
-                </div>
-                <div style="text-align: center; margin-top: 16px;">
-                    <button class="btn-text" id="importBtnInitial">
-                        📥 Ou restaurer une sauvegarde
+                    <div style="text-align: center; margin-top: 16px;">
+                        <button class="btn-text" id="importBtnInitial">
+                            📥 Ou restaurer une sauvegarde
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Section Sélection -->
+                <section class="action-section" id="actionSection" style="display: none;">
+                    <!-- Filtre saison -->
+                    <div class="season-filter" id="seasonFilter">
+                        <button class="season-pill" data-season="ete">☀️ Été</button>
+                        <button class="season-pill" data-season="mi-saison">🍂 Mi-saison</button>
+                        <button class="season-pill" data-season="hiver">❄️ Hiver</button>
+                        <button class="season-pill" data-season="toutes">📋 Toutes</button>
+                    </div>
+
+                    <!-- Bouton principal -->
+                    <button class="btn-primary" id="pickOutfitBtn">
+                        🎲 Choisir ma tenue
                     </button>
-                </div>
-            </section>
+                </section>
 
-            <!-- Section Sélection -->
-            <section class="action-section" id="actionSection" style="display: none;">
-                <!-- Filtre saison -->
-                <div class="season-filter" id="seasonFilter">
-                    <button class="season-pill" data-season="ete">☀️ Été</button>
-                    <button class="season-pill" data-season="mi-saison">🍂 Mi-saison</button>
-                    <button class="season-pill" data-season="hiver">❄️ Hiver</button>
-                    <button class="season-pill" data-season="toutes">📋 Toutes</button>
-                </div>
+                <!-- Calendrier -->
+                <section class="calendar-section" id="calendarSection" style="display: none;">
+                    <div class="calendar-header">
+                        <button class="btn-text" id="prevMonthBtn">← Mois précédent</button>
+                        <h2 id="calendarTitle">Janvier 2026</h2>
+                        <button class="btn-text" id="nextMonthBtn">Mois suivant →</button>
+                    </div>
+                    <div class="calendar" id="calendar"></div>
+                </section>
 
-                <!-- Bouton principal -->
-                <button class="btn-primary" id="pickOutfitBtn">
-                    🎲 Choisir ma tenue
-                </button>
+                <!-- Galerie -->
+                <section class="gallery-section" id="gallerySection" style="display: none;">
+                    <div class="gallery-header">
+                        <h2>Mes tenues (<span id="availableCount">0</span> / <span id="outfitCount">0</span>)</h2>
+                        <button class="btn-text" id="toggleGalleryBtn">Voir tout</button>
+                    </div>
+                    <div class="gallery" id="gallery"></div>
+                </section>
+            </div>
+
+            <!-- ===== ONGLET PARAMETRES ===== -->
+            <div class="tab-content" id="tabParametres">
 
                 <!-- Groupe Gestion des tenues -->
                 <div class="button-group">
@@ -93,17 +129,9 @@
                         <span class="label">Optimiser le stockage</span>
                     </button>
                 </div>
+            </div>
 
-                <!-- Groupe Calendrier -->
-                <div class="button-group">
-                    <button class="btn-secondary btn-full" id="toggleCalendarBtn">
-                        <span class="icon">📅</span>
-                        <span class="label">Voir le calendrier</span>
-                    </button>
-                </div>
-            </section>
-
-            <!-- Résultat -->
+            <!-- ===== MODALS (position fixed, partagés) ===== -->
             <section class="result-section" id="resultSection" style="display: none;">
                 <div class="result-card">
                     <h2>Votre tenue du jour</h2>
@@ -115,7 +143,6 @@
                 </div>
             </section>
 
-            <!-- Modal Toutes Utilisées -->
             <section class="result-section" id="allUsedSection" style="display: none;">
                 <div class="result-card">
                     <h2>🎉 Toutes les tenues portées !</h2>
@@ -129,26 +156,6 @@
                 </div>
             </section>
 
-            <!-- Galerie -->
-            <section class="gallery-section" id="gallerySection" style="display: none;">
-                <div class="gallery-header">
-                    <h2>Mes tenues (<span id="availableCount">0</span> / <span id="outfitCount">0</span>)</h2>
-                    <button class="btn-text" id="toggleGalleryBtn">Voir tout</button>
-                </div>
-                <div class="gallery" id="gallery"></div>
-            </section>
-
-            <!-- Calendrier -->
-            <section class="calendar-section" id="calendarSection" style="display: none;">
-                <div class="calendar-header">
-                    <button class="btn-text" id="prevMonthBtn">← Mois précédent</button>
-                    <h2 id="calendarTitle">Janvier 2026</h2>
-                    <button class="btn-text" id="nextMonthBtn">Mois suivant →</button>
-                </div>
-                <div class="calendar" id="calendar"></div>
-            </section>
-
-            <!-- Modal édition calendrier -->
             <section class="result-section" id="editCalendarModal" style="display: none;">
                 <div class="result-card">
                     <h2 id="editCalendarTitle">Tenue du jour</h2>

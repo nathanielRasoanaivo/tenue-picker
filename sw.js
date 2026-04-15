@@ -1,10 +1,11 @@
-const CACHE_NAME = 'tenue-picker-v7';
+const CACHE_NAME = 'tenue-picker-v8';
 const urlsToCache = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './manifest.json'
+  './manifest.json',
+  './icon.png'
 ];
 
 // Installation du Service Worker

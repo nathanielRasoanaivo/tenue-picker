@@ -475,7 +475,6 @@ class TenuePickerApp {
         this.currentlySelectedOutfitId = null;
         this.isProcessingFiles = false;
         this.activeSeason = localStorage.getItem('activeSeason') || this.detectSeason();
-        this.calendarVisible = false;
         this.currentCalendarYear = new Date().getFullYear();
         this.currentCalendarMonth = new Date().getMonth() + 1;
         this.editingDate = null;
@@ -513,7 +512,9 @@ class TenuePickerApp {
         this.importBtnInitial = document.getElementById('importBtnInitial');
         this.importInput = document.getElementById('importInput');
         this.deleteAllBtn = document.getElementById('deleteAllBtn');
-        this.toggleCalendarBtn = document.getElementById('toggleCalendarBtn');
+        this.tabBar = document.getElementById('tabBar');
+        this.tabTenue = document.getElementById('tabTenue');
+        this.tabParametres = document.getElementById('tabParametres');
         this.calendarSection = document.getElementById('calendarSection');
         this.calendar = document.getElementById('calendar');
         this.calendarTitle = document.getElementById('calendarTitle');
@@ -605,7 +606,9 @@ class TenuePickerApp {
         this.importBtnInitial.addEventListener('click', () => this.importInput.click());
         this.importInput.addEventListener('change', (e) => this.importOutfits(e));
         this.deleteAllBtn.addEventListener('click', () => this.deleteAllOutfits());
-        this.toggleCalendarBtn.addEventListener('click', () => this.toggleCalendar());
+        this.tabBar.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
+        });
         this.seasonFilter.querySelectorAll('.season-pill').forEach(pill => {
             pill.addEventListener('click', () => this.setActiveSeason(pill.dataset.season));
         });
@@ -720,6 +723,7 @@ class TenuePickerApp {
         this.uploadSection.style.display = hasOutfits ? 'none' : 'block';
         this.actionSection.style.display = hasOutfits ? 'block' : 'none';
         this.gallerySection.style.display = hasOutfits ? 'block' : 'none';
+        this.calendarSection.style.display = hasOutfits ? 'block' : 'none';
 
         // Tenues filtrées par saison
         const filtered = this.getFilteredOutfits();
@@ -736,8 +740,9 @@ class TenuePickerApp {
         const hasUsedOutfits = this.outfits.some(outfit => outfit.used);
         this.resetAllBtn.style.display = hasUsedOutfits ? 'block' : 'none';
 
-        // Afficher galerie
+        // Afficher galerie et calendrier
         this.renderGallery();
+        if (hasOutfits) this.renderCalendar();
     }
 
     renderGallery() {
@@ -768,12 +773,13 @@ class TenuePickerApp {
                 <img src="${outfit.data}" alt="Tenue" loading="lazy">
                 ${checkmark}
                 <span class="season-badge" data-id="${outfit.id}" title="Changer la saison">${seasonEmoji}</span>
+                <button class="rotate-btn" data-id="${outfit.id}" title="Pivoter 90°">↻</button>
                 <button class="delete-btn" data-id="${outfit.id}">×</button>
             `;
 
             // Toggle used status on click
             item.addEventListener('click', (e) => {
-                if (!e.target.closest('.delete-btn') && !e.target.closest('.season-badge')) {
+                if (!e.target.closest('.delete-btn') && !e.target.closest('.season-badge') && !e.target.closest('.rotate-btn')) {
                     this.toggleUsed(outfit.id);
                 }
             });
@@ -781,6 +787,11 @@ class TenuePickerApp {
             item.querySelector('.season-badge').addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.cycleSeason(outfit.id);
+            });
+
+            item.querySelector('.rotate-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.rotateOutfit(outfit.id);
             });
 
             item.querySelector('.delete-btn').addEventListener('click', (e) => {
@@ -1081,16 +1092,15 @@ class TenuePickerApp {
         this.weatherWidget.style.display = 'flex';
     }
 
-    toggleCalendar() {
-        this.calendarVisible = !this.calendarVisible;
-        this.calendarSection.style.display = this.calendarVisible ? 'block' : 'none';
+    switchTab(tabName) {
+        // Mettre à jour les onglets
+        this.tabBar.querySelectorAll('.tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tabName);
+        });
 
-        if (this.calendarVisible) {
-            this.toggleCalendarBtn.querySelector('.label').textContent = 'Masquer le calendrier';
-            this.renderCalendar();
-        } else {
-            this.toggleCalendarBtn.querySelector('.label').textContent = 'Voir le calendrier';
-        }
+        // Mettre à jour le contenu
+        this.tabTenue.classList.toggle('active', tabName === 'tenue');
+        this.tabParametres.classList.toggle('active', tabName === 'parametres');
     }
 
     navigateMonth(direction) {
@@ -1173,31 +1183,39 @@ class TenuePickerApp {
         // Ajouter les event listeners sur les jours
         this.calendar.querySelectorAll('.calendar-day:not(.empty)').forEach(dayEl => {
             const date = dayEl.dataset.date;
-            if (!date) return; // Ignorer les jours sans date
+            if (!date) return;
 
-            // Event listener pour tout le jour
             dayEl.addEventListener('click', (e) => {
-                // Si on clique sur le bouton de suppression
+                // Clic sur le bouton supprimer
                 if (e.target.classList.contains('calendar-delete-btn')) {
                     e.stopPropagation();
-                    const dateToDelete = e.target.dataset.date;
-                    this.quickDeleteCalendarEntry(dateToDelete);
+                    this.quickDeleteCalendarEntry(e.target.dataset.date);
                     return;
                 }
 
-                // Si on clique directement sur une miniature, montrer les détails
+                // Clic sur la miniature : toggle le bouton supprimer
                 if (e.target.classList.contains('calendar-outfit-thumb')) {
                     e.stopPropagation();
-                    const outfitId = parseInt(e.target.dataset.outfitId);
-                    this.showOutfitDetail(outfitId);
+                    const container = e.target.closest('.calendar-outfit-container');
+
+                    if (container.classList.contains('show-delete')) {
+                        // 2e clic : ouvrir les détails
+                        container.classList.remove('show-delete');
+                        const outfitId = parseInt(e.target.dataset.outfitId);
+                        this.showOutfitDetail(outfitId);
+                    } else {
+                        // 1er clic : fermer les autres et montrer le bouton supprimer
+                        this.calendar.querySelectorAll('.calendar-outfit-container.show-delete').forEach(c => c.classList.remove('show-delete'));
+                        container.classList.add('show-delete');
+                    }
                     return;
                 }
 
-                // Sinon, ouvrir l'éditeur
+                // Clic ailleurs sur le jour : fermer les boutons supprimer ouverts, ouvrir l'éditeur
+                this.calendar.querySelectorAll('.calendar-outfit-container.show-delete').forEach(c => c.classList.remove('show-delete'));
                 this.openEditCalendar(date);
             });
 
-            // Curseur pointer pour indiquer que c'est cliquable
             dayEl.style.cursor = 'pointer';
         });
     }
@@ -1341,6 +1359,29 @@ class TenuePickerApp {
             await this.store.update(id, { season: nextSeason });
             await this.loadOutfits();
         }
+    }
+
+    async rotateOutfit(id) {
+        const outfit = this.outfits.find(o => o.id === id);
+        if (!outfit) return;
+
+        const img = new Image();
+        img.src = outfit.data;
+
+        await new Promise(resolve => { img.onload = resolve; });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.height;
+        canvas.height = img.width;
+
+        const ctx = canvas.getContext('2d');
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+        const rotatedData = canvas.toDataURL('image/jpeg', 0.82);
+        await this.store.update(id, { data: rotatedData });
+        await this.loadOutfits();
     }
 
     getSeasonEmoji(season) {
